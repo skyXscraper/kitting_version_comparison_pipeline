@@ -16,11 +16,13 @@ DEFAULTS = {
     "ocr_weights": {"ply_on_found": 55, "range_on_found": 20, "ply_read_acc": 15, "range_read_acc": 5,
                     "ocr_speed": 5},
     "det_weights": {"roll_recall": 40, "roll_precision": 25, "label_coverage": 20, "det_speed": 15},
-    # ---- ply: a roll PICKED with the wrong ply goes to a wrong bin, so it costs this much of a roll on top of
-    # getting no credit (0 = a wrong ply is no worse than an unreadable one).
+    # ---- ply: a roll PICKED with a ply that is not even close goes to a wrong bin, so it costs this much of a
+    # roll on top of getting no credit (0 = a wrong ply is no worse than an unreadable one).
     "wrong_pick_penalty": 0.25,
-    # ---- range: exact = 1.0, otherwise credit by number of characters to change (edit distance).
-    "range_partial_credit": {"1": 0.5, "2": 0.25},
+    # ---- close is not entirely wrong: exact = 1.0, otherwise credit by the number of characters to change
+    # (edit distance: a digit replaced, added or dropped). Ply: 1 off still counts; range: up to 3 off.
+    "ply_partial_credit": {"1": 0.5},
+    "range_partial_credit": {"1": 0.75, "2": 0.5, "3": 0.25},
     # ---- matching a version's rolls to the truth rolls: first-seen times at most this far apart (s).
     "roll_match_tolerance_s": 6.0,
     # ---- a found roll counts as "labels covered" when it got at least this many OCR reads.

@@ -22,13 +22,22 @@ def lev(a, b):
     return prev[-1]
 
 
-def range_credit(read, true, cfg):
+def _credit(read, true, table):
+    """1 for an exact read, the partial credit of the table for a close one (by characters off), else 0."""
     read, true = read.replace(" ", ""), true.replace(" ", "")
     if not read:
         return 0.0
     if read == true:
         return 1.0
-    return float(cfg["range_partial_credit"].get(str(lev(read, true)), 0.0))
+    return float(table.get(str(lev(read, true)), 0.0))
+
+
+def range_credit(read, true, cfg):
+    return _credit(read, true, cfg["range_partial_credit"])
+
+
+def ply_credit(read, true, cfg):
+    return _credit(read, true, cfg["ply_partial_credit"])
 
 
 def lin(x, good, bad):
@@ -50,12 +59,13 @@ def wilson(k, n, z=1.96):
 def _read_stats(rec, run, by_track, cfg):
     """Raw recognizer quality on one found roll, before any voting."""
     r, tp, tr = rec["roll"], rec["true_ply"], rec["true_range"]
-    s = {"ply_reads": 0, "ply_reads_right": 0, "range_reads": 0, "range_reads_credit": 0.0, "flip_right": 0,
+    s = {"ply_reads": 0, "ply_reads_right": 0, "ply_reads_credit": 0.0, "range_reads": 0, "range_reads_credit": 0.0, "flip_right": 0,
          "conf_right": [], "conf_wrong": [], "wrong_reads": Counter()}
     if run.reads:
         for rd in by_track.get(r.track, []):
             if rd.fld == "ply" and tp:
                 s["ply_reads"] += 1
+                s["ply_reads_credit"] += ply_credit(rd.text, tp, cfg)
                 if rd.text == tp:
                     s["ply_reads_right"] += 1
                     if rd.score is not None:
@@ -73,6 +83,7 @@ def _read_stats(rec, run, by_track, cfg):
         if tp:
             for text, n in r.ply_reads:
                 s["ply_reads"] += n
+                s["ply_reads_credit"] += n * ply_credit(text, tp, cfg)
                 if text == tp:
                     s["ply_reads_right"] += n
                 else:
@@ -111,11 +122,14 @@ def build_records(ver, truth, cfg, videos=None):
             rec = {"video": video, "kind": kind, "n": t.n if t else None,
                    "t": t.t if t and t.t is not None else r.first_seen if r else None,
                    "true_ply": t.ply if t and kind == "real" else "", "true_range": t.rng if t and kind == "real" else "",
-                   "roll": r, "ply_verdict": None, "range_credit": None, "notes": t.notes if t else ""}
+                   "roll": r, "ply_verdict": None, "ply_credit": None, "ply_close": False, "range_credit": None,
+                   "notes": t.notes if t else ""}
             if kind == "real":
                 if rec["true_ply"]:
                     rec["ply_verdict"] = ("missed" if r is None else "right" if r.ply == rec["true_ply"] else
                                           "no_read" if not r.ply else "wrong_pick" if r.status == "picked" else "wrong")
+                    rec["ply_credit"] = 0.0 if r is None else ply_credit(r.ply, rec["true_ply"], cfg)
+                    rec["ply_close"] = 0 < rec["ply_credit"] < 1     # wrong, but only just: partial credit
                 if rec["true_range"]:
                     rec["range_credit"] = 0.0 if r is None else range_credit(r.rng, rec["true_range"], cfg)
                 if r is not None:
@@ -152,6 +166,9 @@ def aggregate(recs, runs, cfg):
         "truth_rolls": len(real), "found": len(found), "missed": len(real) - len(found), "false": len(false),
         "ply_n": len(ply), "ply_right": v["right"], "ply_wrong_pick": v["wrong_pick"], "ply_wrong": v["wrong"],
         "ply_no_read": v["no_read"], "ply_missed": v["missed"], "ply_ci": wilson(v["right"], len(ply)),
+        "ply_close": sum(r["ply_close"] for r in ply),
+        "ply_penalized": sum(r["ply_verdict"] == "wrong_pick" and not r["ply_close"] for r in ply),
+        "ply_reads_credit": sum(r.get("ply_reads_credit", 0.0) for r in found),
         "range_n": len(rng), "range_exact": sum(r["range_credit"] == 1.0 for r in rng),
         "range_partial": sum(0 < r["range_credit"] < 1 for r in rng),
         "ply_reads": sum(r.get("ply_reads", 0) for r in found),
@@ -169,8 +186,8 @@ def aggregate(recs, runs, cfg):
     m["covered"] = sum(r["roll"].n_reads >= cfg["min_reads_for_coverage"] for r in found)
     reported = m["found"] + m["false"]
     rec_, prec = _ratio(m["found"], m["truth_rolls"]), _ratio(m["found"], reported)
-    credit = lambda rows: max(0.0, (sum(r["ply_verdict"] == "right" for r in rows)
-                                    - pen * sum(r["ply_verdict"] == "wrong_pick" for r in rows)) / len(rows)) if rows else None
+    credit = lambda rows: max(0.0, (sum(r["ply_credit"] for r in rows) - pen * sum(
+        r["ply_verdict"] == "wrong_pick" and not r["ply_close"] for r in rows)) / len(rows)) if rows else None
     m["comp"] = {
         "ply_decision": credit(ply),
         "ply_on_found": credit(ply_found),
@@ -179,7 +196,7 @@ def aggregate(recs, runs, cfg):
         "roll_recall": rec_, "roll_precision": prec,
         "roll_f1": None if rec_ is None or prec is None else 0.0 if rec_ + prec == 0 else 2 * rec_ * prec / (rec_ + prec),
         "label_coverage": _ratio(m["covered"], len(found)),
-        "ply_read_acc": _ratio(m["ply_reads_right"], m["ply_reads"]),
+        "ply_read_acc": _ratio(m["ply_reads_credit"], m["ply_reads"]),
         "range_read_acc": _ratio(m["range_reads_credit"], m["range_reads"]),
         "latency": lin(m["latency_median"], cfg["latency_good_s"], cfg["latency_bad_s"]),
         "throughput": None if m["fps"] is None else min(1.0, m["fps"] / cfg["target_fps"]),

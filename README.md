@@ -104,11 +104,11 @@ Three scores, each 0-100 (grades: A >= 90, B >= 75, C >= 60, D >= 40, else E).
 
 | Part | Weight | Meaning |
 |---|---|---|
-| Ply decision (of all true rolls) | 45 | Rolls whose decided ply equals the true ply. A missed roll scores 0. A roll *picked* with a wrong ply also loses 0.25 of a roll, because it goes to a wrong bin. |
-| Range decided right | 15 | Exact = 1, one character off = 0.5, two off = 0.25, else 0. |
+| Ply decided right or close | 45 | Exact = 1, one digit off = 0.5 (a digit replaced, added or dropped: 108 for 109, 1081 for 108, 23 for 235), else 0. A missed roll scores 0. A roll *picked* with a ply that is not even close also loses 0.25 of a roll, because it goes to a wrong bin. |
+| Range decided right or close | 15 | Exact = 1, one character off = 0.75, two off = 0.5, three off = 0.25, else 0. |
 | Rolls found without false rolls (F1) | 15 | Balance of true rolls found and reported rolls that are real. |
-| Single ply reads right | 10 | Share of individual crop reads equal to the true ply, before any voting. |
-| Single range reads right | 5 | Same for range reads (with the partial credit above). |
+| Single ply reads right or close | 10 | Individual crop reads against the true ply, before any voting (same credit as above). |
+| Single range reads right or close | 5 | Same for range reads (with the partial credit above). |
 | Time to decide a roll | 5 | Median seconds from first seen to decided: full marks <= 2 s, zero >= 10 s. |
 | Frame rate kept | 5 | fps processed / 15 fps target. |
 
@@ -120,6 +120,28 @@ rolls with at least 3 label reads 20, detection time per frame 15.
 
 A part with no data (for example no true ranges yet) is left out and the other weights are rescaled to 100;
 the report says so. All weights and thresholds are in `config.json` (`python kvc.py config`).
+
+### Partial credit for close answers
+
+A read that is nearly right is not counted as entirely wrong, so a model that is consistently close scores
+above one that is far off.
+
+| Field | Exact | 1 off | 2 off | 3 off | Further |
+|---|---|---|---|---|---|
+| Ply | 1 | 0.5 | 0 | 0 | 0 |
+| Range | 1 | 0.75 | 0.5 | 0.25 | 0 |
+
+- **"Off"** counts characters replaced, added or dropped. For a true ply of 108, the reads 109, 1081 and 10
+  are all one off. An empty read gets no credit.
+- **Where it applies:** to the decided ply and range of each roll, and to the individual crop reads before
+  voting.
+- **Wrong-pick penalty:** a roll picked with a close ply does not lose the extra 0.25 of a roll; only picks
+  more than one digit off do. It still goes to a wrong bin, so it stays in the "picked with a wrong ply"
+  alert, marked as close.
+- **In the reports:** close rolls show as "close" in the per-roll verdict and are counted under "Ply close
+  (wrong, partial credit)". "Ply right / labelled" and the 95% interval count exact matches only.
+- **Changing it:** the credit values are `ply_partial_credit` and `range_partial_credit` in `config.json`
+  (characters off -> credit; anything not listed gets 0).
 
 ### Reading the result
 

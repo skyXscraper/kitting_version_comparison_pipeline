@@ -7,16 +7,16 @@ from .scoring import grade
 from .xlsx_io import S
 
 LABELS = {
-    "ply_decision": "Ply decision (of all true rolls)",
-    "ply_on_found": "Ply decision (of rolls the detector found)",
-    "range_decision": "Range decided right (of all true rolls)",
-    "range_on_found": "Range decided right (of found rolls)",
+    "ply_decision": "Ply decided right or close (of all true rolls)",
+    "ply_on_found": "Ply decided right or close (of found rolls)",
+    "range_decision": "Range decided right or close (of all true rolls)",
+    "range_on_found": "Range decided right or close (of found rolls)",
     "roll_f1": "Rolls found without false rolls (F1)",
     "roll_recall": "True rolls found",
     "roll_precision": "Reported rolls that are real",
     "label_coverage": "Found rolls with enough label reads",
-    "ply_read_acc": "Single ply reads right (before voting)",
-    "range_read_acc": "Single range reads right (before voting)",
+    "ply_read_acc": "Single ply reads right or close (pre-vote)",
+    "range_read_acc": "Single range reads right or close (pre-vote)",
     "latency": "Time to decide a roll",
     "throughput": "Frame rate kept",
     "det_speed": "Detection time per frame",
@@ -36,12 +36,15 @@ def num(x, d=1, unit=""):
 def detail(k, m):
     """The raw counts behind a component."""
     if k in ("ply_decision", "ply_on_found"):
-        s = f"{m['ply_right']} right of {m['ply_n'] - (m['ply_missed'] if k == 'ply_on_found' else 0)}"
+        s = (f"{m['ply_right']} right" + (f", {m['ply_close']} close" if m["ply_close"] else "")
+             + f" of {m['ply_n'] - (m['ply_missed'] if k == 'ply_on_found' else 0)}")
         bits = [f"{m[x]} {t}" for x, t in (("ply_wrong_pick", "wrong + picked"), ("ply_wrong", "wrong"),
                                            ("ply_no_read", "no ply"), ("ply_missed", "roll missed")) if m[x]
                 and not (k == "ply_on_found" and x == "ply_missed")]
-        if m["ply_wrong_pick"] and m["pen"]:
-            bits.append(f"each wrong pick also costs {m['pen']:g} of a roll")
+        if m["ply_close"]:
+            bits.append("the wrong ones include the close ones")
+        if m["ply_penalized"] and m["pen"]:
+            bits.append(f"each wrong pick that is not close also costs {m['pen']:g} of a roll")
         return s + (f" ({', '.join(bits)})" if bits else "")
     if k in ("range_decision", "range_on_found"):
         return f"{m['range_exact']} exact, {m['range_partial']} close of {m['range_n']} with a true range"
@@ -50,7 +53,8 @@ def detail(k, m):
     if k == "label_coverage":
         return f"{m['covered']} of {m['found']} found rolls"
     if k == "ply_read_acc":
-        return f"{m['ply_reads_right']} of {m['ply_reads']} reads"
+        return (f"{m['ply_reads_right']} of {m['ply_reads']} reads"
+                + (f", credit {m['ply_reads_credit']:.1f} with the close ones" if m["ply_reads_credit"] > m["ply_reads_right"] else ""))
     if k == "range_read_acc":
         return f"credit {m['range_reads_credit']:.1f} of {m['range_reads']} reads"
     if k == "latency":
@@ -86,8 +90,9 @@ def _scoring_rows(cfg):
         rows.append([S(title, "bold"), "", "weight = points out of 100; a part with no data is left out and the rest rescaled"])
         rows += [[f"   {LABELS[k]}", w, k] for k, w in cfg[name].items()]
     rows.append([S("Rules", "bold")])
-    rows += [["wrong_pick_penalty", cfg["wrong_pick_penalty"], "a roll picked with a wrong ply loses this much of a roll on top of getting no credit"],
-             ["range_partial_credit", str(cfg["range_partial_credit"]), "range credit by characters off: exact = 1"],
+    rows += [["wrong_pick_penalty", cfg["wrong_pick_penalty"], "a roll picked with a wrong ply that is not close loses this much of a roll on top of getting no credit"],
+             ["ply_partial_credit", str(cfg["ply_partial_credit"]), "ply credit by characters off (a digit replaced, added or dropped): exact = 1, not listed = 0"],
+             ["range_partial_credit", str(cfg["range_partial_credit"]), "range credit by characters off: exact = 1, not listed = 0"],
              ["roll_match_tolerance_s", cfg["roll_match_tolerance_s"], "a version's roll matches a truth roll when first seen within this many seconds"],
              ["min_reads_for_coverage", cfg["min_reads_for_coverage"], "OCR reads a found roll needs to count as 'labels covered'"],
              ["target_fps", cfg["target_fps"], "frame rate the run should keep"],
@@ -104,6 +109,8 @@ def _rec_cells(rec):
     if rec is None:
         return [S("(video not run)", "dim")] + [""] * 6
     v = VERDICT.get(rec["ply_verdict"])
+    if rec.get("ply_close"):
+        v = ("CLOSE, picked" if rec["ply_verdict"] == "wrong_pick" else "close", "warn")
     verdict = S(*v) if v else S("false roll", "warn") if rec["kind"] == "false" else ""
     if r is None:
         return ["", verdict, "", rec["range_credit"], S("(not found)", "dim"), "", ""]
@@ -189,6 +196,7 @@ def score_sheets(res, obs, cfg):
                 ["True rolls labelled", m["truth_rolls"]], ["Rolls found", m["found"]], ["Rolls missed", m["missed"]],
                 ["False rolls", m["false"]], ["Ply right", f"{m['ply_right']}/{m['ply_n']}"],
                 ["Ply accuracy 95% interval", "-" if not m["ply_ci"] else f"{pct(m['ply_ci'][0])} to {pct(m['ply_ci'][1])}"],
+                ["Ply close (wrong, partial credit)", m["ply_close"]],
                 ["Picked with a wrong ply", m["ply_wrong_pick"]],
                 ["Range exact / close / labelled", f"{m['range_exact']} / {m['range_partial']} / {m['range_n']}"],
                 ["Text boxes detected", m["boxes"]], ["OCR reads", m["ocr_reads"]],
@@ -234,6 +242,7 @@ def _matrix(results, cfg):
         rows.append((LABELS[k], [m["comp"][k] for m in ms], "high", lambda x: pct(x, 1)))
     rows.append(None)
     rows.append(("Ply right / labelled", [f"{m['ply_right']}/{m['ply_n']}" for m in ms], None, str))
+    rows.append(("Ply close (wrong, partial credit)", [m["ply_close"] for m in ms], None, str))
     rows.append(("Picked with a wrong ply", [m["ply_wrong_pick"] for m in ms], "low", str))
     rows.append(("Rolls missed", [m["missed"] for m in ms], "low", str))
     rows.append(("False rolls", [m["false"] for m in ms], "low", str))

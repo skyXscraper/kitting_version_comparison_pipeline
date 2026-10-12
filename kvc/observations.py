@@ -77,7 +77,8 @@ def observe(res, cfg, truth_issues=(), brief=False):
     wp = [r for r in real if r["ply_verdict"] == "wrong_pick"]
     if wp:
         add("ALERT", f"{len(wp)} roll(s) were PICKED with a wrong ply (would go to a wrong bin): " + _listed(
-            f"{_where(r)} decided {r['roll'].ply} / true {r['true_ply']} -> bin {r['roll'].bin or '?'}" for r in wp))
+            f"{_where(r)} decided {r['roll'].ply} / true {r['true_ply']} -> bin {r['roll'].bin or '?'}"
+            + (" (close: partial credit)" if r["ply_close"] else "") for r in wp))
     bad = [r for r in found if r["ply_verdict"] in ("wrong_pick", "wrong", "no_read")]
     outvoted = [r for r in bad if r.get("ply_reads_right")]
     never = [r for r in bad if not r.get("ply_reads_right")]
