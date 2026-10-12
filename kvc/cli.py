@@ -9,16 +9,22 @@ from pathlib import Path
 
 from . import report
 from .config import CONFIG_PATH, REPORTS_DIR, TRUTH_PATH, load_config, write_default_config
-from .loader import load_folder, load_registry, load_versions, natural, save_registry
+from .loader import entry_sources, load_folder, load_registry, load_versions, natural, save_registry
 from .observations import observe, observe_compare
 from .scoring import evaluate, grade, head_to_head
 from .truth import build_truth, is_labelled, load_truth, write_truth
 from .xlsx_io import write_workbook
 
 
-def _filter(videos, pattern):
+def _filter(videos, pattern, who="this version"):
+    """Videos to use: all, the ones matching a 'a*,b*' pattern, or the ones in a list of exact names."""
     if not pattern:
         return set(videos)
+    if not isinstance(pattern, str):
+        keep = set(videos) & set(pattern)
+        if not keep:
+            raise SystemExit(f"{who} did not run any of the chosen videos.")
+        return keep
     pats = [p.strip() for p in pattern.split(",") if p.strip()]
     keep = {v for v in videos if any(fnmatch.fnmatch(v.lower(), p.lower()) for p in pats)}
     if not keep:
@@ -67,17 +73,25 @@ def cmd_add(a):
     else:
         names = [t if t.startswith(("rec", "det")) else f"rec_{t}" for t in data["tags"]]
     entries = load_registry()
-    taken = {e["name"] for e in entries}
+    taken = {e["name"]: e for e in entries}
     clash = [x for x in names if x in taken]
-    if clash and not a.replace:
+    append = getattr(a, "append", False)
+    if clash and not a.replace and not append:
         raise SystemExit(f"Version name(s) already registered: {', '.join(clash)}\n"
-                         "Pick another with --name / --names, or pass --replace to point the name at this folder.")
-    entries = [e for e in entries if e["name"] not in names]
+                         "Pick another with --name / --names, pass --append to add this folder's videos to the "
+                         "version, or --replace to point the name at this folder only.")
+    if not append:
+        entries = [e for e in entries if e["name"] not in names]
     for b, name in enumerate(names):
         m = data["models"][b]
+        rolls = sum(len(r.rolls) for r in m["videos"].values())
+        if append and name in taken:
+            if (str(folder), b) not in entry_sources(taken[name]):
+                taken[name].setdefault("more", []).append({"folder": str(folder), "block": b})
+            print(f"Added to '{name}': {len(m['videos'])} videos, {rolls} rolls from {folder}")
+            continue
         entries.append({"name": name, "folder": str(folder), "block": b, "det": a.det or m["det"],
                         "rec": a.rec or m["rec"], "notes": a.notes or ""})
-        rolls = sum(len(r.rolls) for r in m["videos"].values())
         print(f"Registered '{name}': {len(m['videos'])} videos, {rolls} rolls   "
               f"detector {a.det or m['det'] or '?'}, recognizer {a.rec or m['rec'] or '?'}")
     for w in data["warnings"]:
@@ -121,7 +135,7 @@ def cmd_truth(a):
 
 def score_version(ver, cfg, truth, issues, videos=None):
     """Score one version and save its report -> {res, obs, text, sheets, out}. Used by the command line and the web page."""
-    res = evaluate(ver, truth, cfg, _filter(ver.videos, videos) if videos else None)
+    res = evaluate(ver, truth, cfg, _filter(ver.videos, videos, ver.name) if videos else None)
     obs = observe(res, cfg, issues)
     text = report.score_text(res, obs, cfg)
     sheets = report.score_sheets(res, obs, cfg)
@@ -141,7 +155,7 @@ def compare_versions(versions, cfg, truth, issues, videos=None, own=False, kind=
     """Compare versions and save the report -> {results, obs, per, scope, text, sheets, out}."""
     if len(versions) < 2:
         raise SystemExit("compare needs at least two versions (register more with 'add', or use 'score' for one).")
-    sets = [_filter(v.videos, videos) if videos else set(v.videos) for v in versions]
+    sets = [_filter(v.videos, videos, v.name) if videos else set(v.videos) for v in versions]
     common = set.intersection(*sets)
     if not own and not common:
         raise SystemExit("These versions have no video in common, so they cannot be compared like for like.\n"
@@ -205,6 +219,7 @@ def main(argv=None):
     s.add_argument("--rec", help="recognizer name, if the workbooks do not say")
     s.add_argument("--notes", help="free text shown in reports (e.g. 'Hailo, Pi 5')")
     s.add_argument("--replace", action="store_true", help="overwrite a version name that is already registered")
+    s.add_argument("--append", action="store_true", help="add this folder's videos to a version that is already registered")
     s.set_defaults(fn=cmd_add)
     s = sub.add_parser("remove", help="forget a registered version")
     s.add_argument("names", nargs="+")

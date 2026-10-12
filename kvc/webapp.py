@@ -4,7 +4,8 @@
 
 Runs on this computer only (127.0.0.1) and needs nothing but Python. It works on the same versions.json,
 truth/truth.xlsx, config.json and reports/ as the command line, so the two can be mixed freely. Uploaded workbooks
-are kept in uploads/<version>_<time>/.
+are sorted by the model written in them and kept in uploads/<version>/; uploading more workbooks of a version
+adds their videos to it.
 """
 import argparse
 import contextlib
@@ -23,15 +24,16 @@ from types import SimpleNamespace
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from . import loader, report
-from .cli import cmd_add, cmd_remove, compare_versions, score_version
+from .cli import _refresh_truth, cmd_remove, compare_versions, score_version
 from .config import REPORTS_DIR, ROOT, TRUTH_PATH, load_config
-from .loader import load_folder, load_registry, load_version, load_versions, natural
+from .loader import entry_sources, load_folder, load_registry, load_version, load_versions, natural, save_registry
 from .observations import pct
 from .scoring import evaluate, grade
 from .truth import TruthRoll, build_truth, is_labelled, load_truth, match_rolls, write_truth
 from .xlsx_io import fnum
 
 UPLOADS_DIR = ROOT / "uploads"
+INCOMING = UPLOADS_DIR / "_incoming"
 PAGE = Path(__file__).with_name("webapp.html")
 MAX_UPLOAD = 200 * 1024 * 1024
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -41,10 +43,14 @@ _sig = {}
 
 
 # ---------------------------------------------------------------- helpers
+def _folders(entries):
+    return {f for e in entries for f, _ in entry_sources(e)}
+
+
 def _fresh():
     """Drop the cached workbooks of a folder whose files changed since they were loaded."""
-    for e in load_registry():
-        f, p = e["folder"], Path(e["folder"])
+    for f in _folders(load_registry()):
+        p = Path(f)
         sig = tuple(sorted((x.name, x.stat().st_mtime_ns, x.stat().st_size) for x in p.glob("*.xlsx"))) if p.is_dir() else None
         if _sig.get(f) != sig:
             _sig[f] = sig
@@ -81,8 +87,7 @@ def _truth():
 
 def _prune(before):
     """Delete upload folders that no registered version uses any more."""
-    used = {e["folder"] for e in load_registry()}
-    for f in before - used:
+    for f in before - _folders(load_registry()):
         loader._folder_cache.pop(f, None)
         if Path(f).parent == UPLOADS_DIR:
             shutil.rmtree(f, ignore_errors=True)
@@ -117,73 +122,130 @@ def api_state(_=None):
     truth, issues = _truth()
     versions = []
     for e in load_registry():
-        row = {"name": e["name"], "folder": e["folder"], "uploaded": Path(e["folder"]).parent == UPLOADS_DIR}
+        folders = [f for f, _ in entry_sources(e)]
+        row = {"name": e["name"], "folder": "\n".join(folders),
+               "uploaded": sum(Path(f).parent == UPLOADS_DIR for f in folders), "folders": len(folders)}
         try:
             v = load_version(e)
             m = evaluate(v, truth, cfg)["overall"]
             row.update(det=v.det, rec=v.rec, notes=v.notes, videos=m["videos"], rolls=m["rolls_reported"],
-                       labelled=m["ply_n"], warnings=v.warnings,
+                       labelled=m["ply_n"], warnings=v.warnings, ran=sorted(v.videos, key=natural),
                        scores={k: m["scores"][k]["score"] for k in ("overall", "ocr", "det")},
                        grade=grade(m["scores"]["overall"]["score"], cfg))
         except SystemExit as x:
             row["error"] = str(x)
         versions.append(row)
-    return {"versions": versions, "issues": issues, "root": str(ROOT),
+    names = sorted({x for v in versions for x in v.get("ran", [])}, key=natural)
+    videos = [{"name": x, "rolls": len(truth.get(x, [])), "labelled": sum(1 for t in truth.get(x, []) if t.ply),
+               "scored": is_labelled(truth.get(x, []))} for x in names]
+    return {"versions": versions, "videos": videos, "issues": issues, "root": str(ROOT),
             "truth": {"videos": len(truth), "rolls": sum(len(v) for v in truth.values()),
                       "labelled": sum(1 for v in truth.values() if is_labelled(v))}}
 
 
 def api_upload(query, body):
-    batch, name = query.get("batch", [""])[0], Path(query.get("name", [""])[0].replace("\\", "/")).name
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", batch):
+    batch, i = query.get("batch", [""])[0], query.get("i", [""])[0]
+    name = Path(query.get("name", [""])[0].replace("\\", "/")).name
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", batch) or not re.fullmatch(r"\d{1,5}", i):
         raise SystemExit("Bad upload id.")
     if not name.lower().endswith(".xlsx") or name.startswith("~$"):
         raise SystemExit(f"{name}: not an .xlsx workbook.")
     if not body.startswith(b"PK"):
         raise SystemExit(f"{name}: not a valid .xlsx file.")
-    folder = UPLOADS_DIR / batch
+    folder = INCOMING / batch / i      # one folder per file: two models' workbooks of a video have the same name
     folder.mkdir(parents=True, exist_ok=True)
     (folder / name).write_bytes(body)
     return {"saved": name}
 
 
+def _default_name(tag):
+    return tag if tag.startswith(("rec", "det")) else f"rec_{tag}"
+
+
 def api_add(body):
+    """Sort the uploaded workbooks by the model(s) written in them and add each group to its version."""
     batch = str(body.get("batch", ""))
-    tmp = UPLOADS_DIR / batch
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", batch) or not tmp.is_dir():
+    inc = INCOMING / batch
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", batch) or not inc.is_dir():
         raise SystemExit("No workbooks were uploaded.")
     try:
-        data = load_folder(tmp)
-        tags, n = data["tags"], len(data["models"])
-        names = [x.strip() for x in str(body.get("names") or "").split(",") if x.strip()]
-        if not names:
-            names = [t if t.startswith(("rec", "det")) else f"rec_{t}" for t in tags]
-        if len(names) != n:
-            raise SystemExit(f"These workbooks hold {n} model(s) side by side ({', '.join(tags)}): "
-                             f"give {n} name(s) separated by a comma, or leave the name empty.")
-        bad = [x for x in names if not re.fullmatch(r"[A-Za-z0-9_.-]{1,40}", x)]
-        if bad or len(set(names)) != n:
-            raise SystemExit("Version names must be different and use only letters, digits, _ . -")
-        taken = {e["name"] for e in load_registry()}
-        clash = [x for x in names if x in taken]
-        if clash and not body.get("replace"):
-            raise SystemExit(f"Version name(s) already registered: {', '.join(clash)}. Pick another name, or tick "
-                             "'Replace' to point the name at these workbooks.")
-        folder = UPLOADS_DIR / f"{names[0]}_{batch}"
-        tmp.rename(folder)
-        tmp = folder
-        before = {e["folder"] for e in load_registry()}
-        log = _quiet(cmd_add, SimpleNamespace(folder=str(folder), name=None, names=",".join(names), det=None,
-                                               rec=None, notes=str(body.get("notes") or "").strip(), replace=True))
-    except BaseException:
-        shutil.rmtree(tmp, ignore_errors=True)
-        raise
-    _prune(before)
-    return {"log": log, "names": names}
+        groups, loose, skipped = {}, [], []
+        for d in sorted(inc.iterdir(), key=lambda d: int(d.name)):
+            f = next(d.glob("*.xlsx"))
+            try:
+                data = load_folder(d)
+            except SystemExit:
+                skipped.append(f"{f.name}: not a result workbook (no Frames / Rolls or Summary sheet)")
+                continue
+            tags = tuple(data["tags"]) if len(data["tags"]) == len(data["models"]) else ()
+            if tags:
+                groups.setdefault(tags, []).append((f, data))
+            else:
+                loose.append((f, data))
+        for f, data in loose:   # a workbook that does not name its model(s): only clear when there is one group
+            same = [k for k in groups if len(k) == len(data["models"])]
+            if len(same) == 1:
+                groups[same[0]].append((f, data))
+            else:
+                skipped.append(f"{f.name}: cannot tell which model it belongs to; upload it together with that "
+                               "model's workbooks only")
+        if not groups:
+            raise SystemExit("None of the uploaded files is a result workbook.\n" + "\n".join(skipped))
+        given = [x.strip() for x in str(body.get("names") or "").split(",") if x.strip()]
+        if given:
+            if len(groups) > 1:
+                raise SystemExit("These workbooks come from different models ("
+                                 + "; ".join(" + ".join(k) for k in groups) + "), so they are sorted into versions by "
+                                 "the model written in them. Leave the name empty, or upload one model at a time to name it.")
+            tags = next(iter(groups))
+            if len(given) != len(tags):
+                raise SystemExit(f"These workbooks hold {len(tags)} model(s) side by side ({', '.join(tags)}): "
+                                 f"give {len(tags)} name(s) separated by a comma, or leave the name empty.")
+            if len(set(given)) != len(given) or not all(re.fullmatch(r"[A-Za-z0-9_.-]{1,40}", x) for x in given):
+                raise SystemExit("Version names must be different and use only letters, digits, _ . -")
+        notes = str(body.get("notes") or "").strip()
+        entries = load_registry()
+        by_name = {e["name"]: e for e in entries}
+        added = []
+        for tags, items in groups.items():
+            names = given or [re.sub(r"[^A-Za-z0-9_.-]+", "_", _default_name(t))[:40] for t in tags]
+            folder = UPLOADS_DIR / "+".join(names)
+            folder.mkdir(parents=True, exist_ok=True)
+            videos = []
+            for f, data in items:
+                f.replace(folder / f.name)
+                if f.stem in data["models"][0]["videos"]:
+                    videos.append(f.stem)
+            loader._folder_cache.pop(str(folder), None)
+            data = load_folder(folder)
+            if len(data["models"]) != len(names):
+                raise SystemExit(f"{folder.name}: the workbooks kept for this version do not all have the same layout "
+                                 f"({len(data['models'])} model(s) side by side, expected {len(names)}).")
+            for b, name in enumerate(names):
+                e, m = by_name.get(name), data["models"][b]
+                new = e is None
+                if new:
+                    e = by_name[name] = {"name": name, "folder": str(folder), "block": b, "det": m["det"],
+                                         "rec": m["rec"], "notes": notes}
+                    entries.append(e)
+                else:
+                    if (str(folder), b) not in entry_sources(e):
+                        e.setdefault("more", []).append({"folder": str(folder), "block": b})
+                    e["notes"] = notes or e.get("notes", "")
+                added.append({"name": name, "new": new, "videos": sorted(set(videos), key=natural),
+                              "files": len(items), "model": " + ".join(x for x in (m["det"], m["rec"]) if x)})
+        save_registry(entries)
+    finally:
+        shutil.rmtree(inc, ignore_errors=True)
+    try:
+        log = _quiet(_refresh_truth, load_config(), True)
+    except SystemExit as e:
+        log = f"The truth sheet was not updated: {e}"
+    return {"added": added, "skipped": skipped, "log": log}
 
 
 def api_remove(body):
-    before = {e["folder"] for e in load_registry()}
+    before = _folders(load_registry())
     log = _quiet(cmd_remove, SimpleNamespace(names=[str(body.get("name", ""))]))
     _prune(before)
     return {"log": log}
@@ -258,7 +320,8 @@ def api_run(body):
     cfg = load_config()
     truth, issues = load_truth()
     versions = load_versions(names)
-    videos = str(body.get("videos") or "").strip() or None
+    videos = body.get("videos")      # a list of exact video names, a 'a*,b*' pattern, or nothing = all
+    videos = ([str(x) for x in videos] if isinstance(videos, list) else str(videos or "").strip()) or None
     if len(versions) == 1:
         run = score_version(versions[0], cfg, truth, issues, videos)
         res = run["res"]

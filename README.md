@@ -28,12 +28,19 @@ Opens `http://127.0.0.1:8000` in the browser; keep the console window open while
 another port). It does everything the commands below do, on the same `versions.json`, truth sheet, `config.json`
 and `reports\`, so the page and the command line can be mixed.
 
-1. **Versions** — drop the result workbooks of one version (or choose its folder) and press *Upload & register*.
-   The files are copied to `uploads\`. Side-by-side workbooks need two names, comma-separated (or none).
-2. **Truth** — type the true ply / range in the blue cells and *Save*; or download `truth.xlsx`, fill it in Excel
-   and upload it again.
-3. **Score & compare** — tick one version for its score, two or more for a comparison. The scores, breakdown,
-   observations and per-roll tables are shown on the page, with a link to the saved `report.xlsx`.
+1. **Versions** - drop result workbooks and press *Upload*: any models, any videos, even a single sheet. Each
+   workbook is sorted into the version of the model written in it (`rec v5` -> `rec_v5`; a side-by-side workbook
+   feeds two versions). A version that already exists gets the new videos added; the same video uploaded again
+   replaces the old one. Give a name only when all the workbooks are of one model. Files are kept in `uploads\`.
+2. **Truth** - type the true ply / range in the blue cells and *Save*; or download `truth.xlsx`, fill it in Excel
+   and upload it again. A video needs truth before it gets an accuracy score.
+3. **Score & compare** - tick one version for its score, two or more for a comparison, and tick the video(s) to
+   use (none = all; a comparison uses the videos every ticked version ran). The table shows which version ran
+   which video. Scores, breakdown, observations and per-roll tables are shown on the page, with a link to the
+   saved `report.xlsx`.
+
+Speed parts of the score (frame rate, detection / OCR time) come from the summary workbook; a video uploaded
+without one is scored on accuracy only and the weights are rescaled.
 
 The page is served to this computer only.
 
@@ -41,7 +48,7 @@ The page is served to this computer only.
 
 | Command | What it does |
 |---|---|
-| `add <folder>` | Registers a folder of result workbooks as a version and adds its rolls to the truth sheet. A side-by-side folder (two models per workbook) becomes two versions. Options: `--name`, `--names a,b` (side-by-side), `--det`, `--rec`, `--notes "..."`, `--replace`. |
+| `add <folder>` | Registers a folder of result workbooks as a version and adds its rolls to the truth sheet. A side-by-side folder (two models per workbook) becomes two versions. Options: `--name`, `--names a,b` (side-by-side), `--det`, `--rec`, `--notes "..."`, `--replace`, `--append` (add this folder's videos to a version that already exists). |
 | `truth` | Creates / updates `truth\truth.xlsx` with every roll of every registered version. Never removes what you typed; the previous file is copied to `truth\backups`. |
 | `score <version> [...]` | Scores one version: three scores, the breakdown, per-session table, observations. |
 | `compare <v1> <v2> [...]` | Compares versions **on the videos they all ran** (like for like). No names = all versions. `--all-videos` scores each on its own videos instead. |
@@ -141,7 +148,7 @@ Each report lists what looks abnormal, most serious first:
 kvc.py / kvc.bat     entry point (command line)
 kvc_web.py / .bat    entry point (web page)
 kvc\                 the code (xlsx_io, loader, truth, scoring, observations, report, cli, webapp)
-uploads\             workbooks uploaded through the web page, one folder per upload
+uploads\             workbooks uploaded through the web page, one folder per version
 versions.json        registered versions (written by add / remove)
 config.json          scoring weights and thresholds
 truth\truth.xlsx     the truth sheet;  truth\backups\  earlier copies

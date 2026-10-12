@@ -351,19 +351,32 @@ def save_registry(entries):
 _folder_cache = {}
 
 
+def entry_sources(entry):
+    """Where a version's workbooks are: its folder, plus any folders added to it later -> [(folder, model block)]."""
+    return [(entry["folder"], entry.get("block", 0))] + [(s["folder"], s.get("block", 0)) for s in entry.get("more", [])]
+
+
 def load_version(entry):
-    key = entry["folder"]
-    if key not in _folder_cache:
-        _folder_cache[key] = load_folder(key)
-    data = _folder_cache[key]
+    videos, warnings, first = {}, [], None
+    for key, b in entry_sources(entry):
+        if key not in _folder_cache:
+            _folder_cache[key] = load_folder(key)
+        data = _folder_cache[key]
+        if b >= len(data["models"]):
+            raise SystemExit(f"Version '{entry['name']}': model block {b + 1} no longer exists in {key}")
+        m = data["models"][b]
+        first = first or (data, m)
+        for video, run in m["videos"].items():
+            # a later folder replaces a video of an earlier one, unless it only knows it from a summary workbook
+            if video not in videos or run.reads or not videos[video].reads:
+                videos[video] = run
+        warnings += [w for w in data["warnings"] if w not in warnings]
+    data, m = first
     b = entry.get("block", 0)
-    if b >= len(data["models"]):
-        raise SystemExit(f"Version '{entry['name']}': model block {b + 1} no longer exists in {key}")
-    m = data["models"][b]
-    return Version(name=entry["name"], folder=key, kind=data["kind"], block=b,
+    return Version(name=entry["name"], folder=entry["folder"], kind=data["kind"], block=b,
                    tag=data["tags"][b] if b < len(data["tags"]) else "", det=entry.get("det") or m["det"],
-                   rec=entry.get("rec") or m["rec"], notes=entry.get("notes", ""), videos=m["videos"],
-                   warnings=list(data["warnings"]))
+                   rec=entry.get("rec") or m["rec"], notes=entry.get("notes", ""), videos=videos,
+                   warnings=warnings)
 
 
 def load_versions(names=None):

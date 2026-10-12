@@ -18,6 +18,7 @@
   }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
 header { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; padding: 12px 24px; background: var(--card);
   border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
@@ -76,6 +77,13 @@ tr.video td { background: var(--head); font-weight: 600; }
 .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0 8px; }
 .tabs button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 pre { margin: 8px 0 0; padding: 12px; background: var(--head); border-radius: 6px; overflow: auto; font: 12.5px/1.4 Consolas, monospace; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 0; }
+.chip { border: 1px solid var(--line); border-radius: 12px; padding: 1px 4px 1px 10px; font-size: 12.5px; }
+.chip button { border: 0; background: none; padding: 0 5px; color: var(--dim); }
+#video-pick { max-height: 300px; margin-top: 8px; }
+#video-pick td, #video-pick th { padding: 3px 9px; }
+#video-pick tr.off td { color: var(--dim); }
+td.c, th.c { text-align: center; }
 ol.steps { margin: 0; padding-left: 20px; color: var(--dim); }
 </style>
 </head>
@@ -94,23 +102,29 @@ ol.steps { margin: 0; padding-left: 20px; color: var(--dim); }
 
 <section id="tab-versions" class="on">
   <div class="card">
-    <h2>Add a version</h2>
+    <h2>Upload result workbooks</h2>
     <div id="drop">
-      <div><b>Drop the result workbooks here</b> (the .xlsx files of one version folder, including the summary workbook)</div>
+      <div><b>Drop result workbooks here</b> &mdash; any models, any videos, even one sheet. Choose again to add more
+        (for example the same video from two model folders).</div>
       <div class="row" style="justify-content:center;margin-top:10px">
         <button id="pick-files">Choose files</button>
         <button id="pick-dir">Choose folder</button>
+        <button id="pick-clear" class="link" hidden>clear</button>
         <span id="picked" class="dim">nothing chosen</span>
       </div>
+      <div id="chips" class="chips" style="justify-content:center"></div>
       <input type="file" id="in-files" multiple accept=".xlsx" hidden>
       <input type="file" id="in-dir" webkitdirectory hidden>
     </div>
     <div class="row">
-      <input type="text" id="names" class="grow" placeholder="Version name (optional, e.g. rec_v6). Side-by-side workbooks: two names, comma-separated">
+      <input type="text" id="names" class="grow" placeholder="Version name (optional). Empty = named after the model written in each workbook, e.g. rec_v5">
       <input type="text" id="notes" class="grow" placeholder="Notes (optional, e.g. Hailo, Pi 5)">
-      <label><input type="checkbox" id="replace"> Replace if the name exists</label>
-      <button class="primary" id="upload" disabled>Upload &amp; register</button>
+      <button class="primary" id="upload" disabled>Upload</button>
     </div>
+    <p class="dim small" style="margin-bottom:0">Each workbook goes to the version of its model; a version that already exists gets the
+      new videos added (the same video uploaded again replaces the old one). Then score one model on one video, or compare
+      models on the videos they share.</p>
+    <div id="uploaded"></div>
   </div>
   <div class="card">
     <h2>Registered versions</h2>
@@ -147,12 +161,19 @@ ol.steps { margin: 0; padding-left: 20px; color: var(--dim); }
   <div class="card">
     <h2>Score &amp; compare</h2>
     <div class="row" id="run-versions"></div>
-    <div class="row" style="margin-top:10px">
-      <input type="text" id="run-videos" class="grow" placeholder="Only these videos (optional, wildcards, comma-separated: oct_3_*,19_part2_*)">
+    <div class="row" style="margin-top:14px">
+      <b>Videos</b>
+      <input type="text" id="video-filter" placeholder="Filter videos...">
+      <label><input type="checkbox" id="video-shared"> Only videos every ticked version ran</label>
+      <button id="video-all">Tick all shown</button>
+      <button id="video-none">Untick all</button>
+      <span class="grow"></span>
       <label id="run-own-l"><input type="checkbox" id="run-own"> Score each version on its own videos (not like for like)</label>
       <button class="primary" id="run-go" disabled>Score</button>
     </div>
-    <p class="dim small" style="margin-bottom:0">One version = its score. Two or more = a comparison on the videos they all ran.</p>
+    <div class="scroll" id="video-pick"></div>
+    <p id="run-scope" class="small" style="margin:8px 0 0"></p>
+    <p class="dim small" style="margin-bottom:0">One version = its score. Two or more = a comparison on the videos they all ran. No video ticked = all of them.</p>
   </div>
   <div id="result"></div>
 </section>
@@ -199,7 +220,7 @@ const GRADE = {A: 'good', B: 'good', C: 'warn', D: 'warn', E: 'bad'};
 const LEVEL = {ALERT: 'bad', WARN: 'warn', INFO: ''};
 
 // ------------------------------------------------------------ tabs
-let state = {versions: []}, selected = new Set(), dirty = false;
+let state = {versions: [], videos: []}, selected = new Set(), picked = new Set(), dirty = false;
 function show(tab) {
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   document.querySelectorAll('section').forEach(s => s.classList.toggle('on', s.id === 'tab-' + tab));
@@ -212,43 +233,72 @@ window.addEventListener('beforeunload', e => { if (dirty) e.preventDefault(); })
 // ------------------------------------------------------------ versions
 let files = [];
 function pick(list) {
-  files = [...list].filter(f => /\.xlsx$/i.test(f.name) && !f.name.startsWith('~$'));
-  $('#picked').textContent = files.length ? `${files.length} workbook(s) chosen` : 'no .xlsx files in that selection';
+  const ok = [...list].filter(f => /\.xlsx$/i.test(f.name) && !f.name.startsWith('~$'));
+  if (!ok.length) say('No .xlsx workbooks in that selection.', true);
+  files.push(...ok);
+  showPicked();
+}
+function showPicked(text) {
+  $('#picked').textContent = text || (files.length ? `${files.length} workbook(s) chosen` : 'nothing chosen');
+  $('#pick-clear').hidden = !files.length;
   $('#upload').disabled = !files.length;
+  const few = files.length <= 12;
+  $('#chips').replaceChildren(...(few ? files : []).map(f => el('span', {class: 'chip'}, f.name,
+    el('button', {title: 'take out', onclick: () => { files.splice(files.indexOf(f), 1); showPicked(); }}, '\u00d7'))));
 }
 $('#pick-files').onclick = () => $('#in-files').click();
 $('#pick-dir').onclick = () => $('#in-dir').click();
-$('#in-files').onchange = e => pick(e.target.files);
-$('#in-dir').onchange = e => pick(e.target.files);
+$('#pick-clear').onclick = () => { files = []; showPicked(); };
+$('#in-files').onchange = e => { pick(e.target.files); e.target.value = ''; };
+$('#in-dir').onchange = e => { pick(e.target.files); e.target.value = ''; };
 const drop = $('#drop');
 drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
 drop.ondragleave = () => drop.classList.remove('over');
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); pick(e.dataTransfer.files); };
 
-$('#upload').onclick = () => guard($('#upload'), async () => {
-  const batch = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
-  for (const [i, f] of files.entries()) {
-    $('#picked').textContent = `uploading ${i + 1} of ${files.length}: ${f.name}`;
-    await api(`/api/upload?batch=${batch}&name=${encodeURIComponent(f.name)}`, f, true);
-  }
-  $('#picked').textContent = 'reading the workbooks...';
-  try {
-    const r = await api('/api/add', {batch, names: $('#names').value, notes: $('#notes').value, replace: $('#replace').checked});
-    say(r.log);
-    files = []; $('#names').value = $('#notes').value = ''; $('#replace').checked = false;
-    $('#in-files').value = $('#in-dir').value = '';
-    $('#picked').textContent = 'nothing chosen';
-    selected = new Set(r.names);
-  } catch (e) {
-    $('#picked').textContent = `${files.length} workbook(s) chosen`;
-    throw e;
-  } finally { await refresh(); $('#upload').disabled = !files.length; }
-}).then(() => { $('#upload').disabled = !files.length; });
+$('#upload').onclick = async () => {
+  await guard($('#upload'), async () => {
+    const batch = new Date().toISOString().replace(/\D/g, '').slice(0, 17);
+    for (const [i, f] of files.entries()) {
+      $('#picked').textContent = `uploading ${i + 1} of ${files.length}: ${f.name}`;
+      await api(`/api/upload?batch=${batch}&i=${i}&name=${encodeURIComponent(f.name)}`, f, true);
+    }
+    $('#picked').textContent = 'reading the workbooks...';
+    const r = await api('/api/add', {batch, names: $('#names').value, notes: $('#notes').value});
+    files = []; $('#names').value = $('#notes').value = '';
+    await refresh();
+    showUploaded(r);
+  });
+  showPicked();
+};
+function showUploaded(r) {
+  const names = [...new Set(r.added.map(a => a.name))];
+  const vids = [...new Set(r.added.flatMap(a => a.videos))];
+  const info = new Map(state.videos.map(v => [v.name, v]));
+  const todo = vids.filter(v => !(info.get(v) || {}).scored);
+  const go = () => { selected = new Set(names); picked = new Set(vids); $('#video-filter').value = ''; $('#video-shared').checked = false; show('run'); run(); };
+  $('#uploaded').replaceChildren(el('div', {style: 'margin-top:14px;border-top:1px solid var(--line);padding-top:12px'},
+    el('h3', {style: 'margin-top:0'}, 'Uploaded'),
+    el('ul', {class: 'obs'},
+      r.added.map(a => el('li', {}, el('span', {class: 'tag good'}, a.new ? 'NEW' : 'ADDED'), el('span', {},
+        el('b', {}, a.name), a.model ? ` (${a.model})` : '', `: ${a.files} workbook(s)`,
+        a.videos.length ? ` \u2014 ${a.videos.length > 6 ? a.videos.length + ' videos' : a.videos.join(', ')}` : ''))),
+      r.skipped.map(t => el('li', {}, el('span', {class: 'tag bad'}, 'SKIPPED'), el('span', {}, t)))),
+    todo.length ? el('p', {class: 'warn', style: 'padding:8px 10px;border-radius:6px'},
+      `No truth yet for ${todo.length > 6 ? todo.length + ' of these videos' : todo.join(', ')}: without the true ply / range only speed and agreement between versions can be shown. `,
+      el('button', {onclick: () => { $('#truth-filter').value = todo.length === 1 ? todo[0] : ''; $('#truth-todo').checked = todo.length > 1; show('truth'); }}, 'Fill the truth')) : null,
+    el('div', {class: 'row', style: 'margin-top:10px'},
+      el('button', {class: 'primary', onclick: go}, names.length > 1 ? `Compare ${names.join(' vs ')} on ${vids.length === 1 ? vids[0] : 'these videos'}`
+        : `Score ${names[0]} on ${vids.length === 1 ? vids[0] : 'these videos'}`),
+      el('button', {class: 'link', onclick: () => $('#uploaded').replaceChildren()}, 'dismiss'))));
+}
 
 async function refresh() {
   try { state = await api('/api/state'); } catch (e) { say(e.message, true); return; }
   const names = new Set(state.versions.map(v => v.name));
   selected = new Set([...selected].filter(n => names.has(n)));
+  const have = new Set(state.videos.map(v => v.name));
+  picked = new Set([...picked].filter(n => have.has(n)));
   const t = state.truth;
   $('#status').textContent = `${state.versions.length} version(s) · truth: ${t.rolls} rolls in ${t.videos} videos, ${t.labelled} labelled`;
   renderVersions(); renderRunPicker();
@@ -267,8 +317,8 @@ function renderVersions() {
       el('td', {class: 'num'}, v.videos), el('td', {class: 'num'}, v.rolls), el('td', {class: 'num'}, v.labelled),
       el('td', {class: 'num'}, fmt(s.overall), ' ', s.overall == null ? '' : el('span', {class: 'tag ' + GRADE[v.grade]}, v.grade)),
       el('td', {class: 'num'}, fmt(s.ocr)), el('td', {class: 'num'}, fmt(s.det)),
-      el('td', {class: 'dim'}, v.notes || (v.uploaded ? '' : 'folder on this computer')),
-      el('td', {}, el('button', {class: 'link', onclick: () => { selected = new Set([v.name]); show('run'); run(); }}, 'Score'), remove));
+      el('td', {class: 'dim'}, [v.notes, v.uploaded < v.folders ? 'folder on this computer' : '', v.uploaded ? 'uploaded workbooks' : ''].filter(Boolean).join(' \u00b7 ')),
+      el('td', {}, el('button', {class: 'link', onclick: () => { selected = new Set([v.name]); picked = new Set(); show('run'); run(); }}, 'Score'), remove));
   });
   box.replaceChildren(el('div', {class: 'scroll'}, el('table', {},
     el('thead', {}, el('tr', {}, head.map((h, i) => el('th', {class: i >= 2 && i <= 7 ? 'num' : ''}, h)))), el('tbody', {}, rows))));
@@ -361,22 +411,60 @@ $('#in-truth').onchange = e => guard($('#truth-up'), async () => {
 function renderRunPicker() {
   const ok = state.versions.filter(v => !v.error);
   $('#run-versions').replaceChildren(...(ok.length ? ok.map(v => el('label', {class: 'btn'},
-    el('input', {type: 'checkbox', checked: selected.has(v.name), onchange: e => { e.target.checked ? selected.add(v.name) : selected.delete(v.name); runButton(); }}),
-    v.name, el('span', {class: 'dim small'}, `${v.labelled} labelled`))) : [el('span', {class: 'dim'}, 'No versions yet: add one in the Versions tab.')]));
+    el('input', {type: 'checkbox', checked: selected.has(v.name), onchange: e => { e.target.checked ? selected.add(v.name) : selected.delete(v.name); renderVideos(); }}),
+    v.name, el('span', {class: 'dim small'}, `${v.ran.length} videos`))) : [el('span', {class: 'dim'}, 'No versions yet: upload workbooks in the Versions tab.')]));
+  renderVideos();
+}
+// videos the ticked versions can be scored on: every one of them ran it (or any of them, when each uses its own)
+function scope() {
+  const vs = state.versions.filter(v => !v.error && selected.has(v.name));
+  const ran = name => vs.filter(v => v.ran.includes(name)).length;
+  const own = $('#run-own').checked && vs.length > 1;
+  const usable = state.videos.filter(v => vs.length && (own ? ran(v.name) > 0 : ran(v.name) === vs.length));
+  return {vs, ran, usable, used: picked.size ? usable.filter(v => picked.has(v.name)) : usable};
+}
+function shownVideos() {
+  const q = $('#video-filter').value.trim().toLowerCase(), {vs, ran} = scope();
+  return state.videos.filter(v => (!q || v.name.toLowerCase().includes(q)) && (!$('#video-shared').checked || !vs.length || ran(v.name) === vs.length));
+}
+function renderVideos() {
+  const ok = state.versions.filter(v => !v.error), {vs, usable, used} = scope(), usableSet = new Set(usable.map(v => v.name));
+  const rows = shownVideos().map(v => el('tr', {class: vs.length && !usableSet.has(v.name) ? 'off' : ''},
+    el('td', {}, el('input', {type: 'checkbox', checked: picked.has(v.name), onchange: e => { e.target.checked ? picked.add(v.name) : picked.delete(v.name); runButton(); }})),
+    el('td', {}, v.name),
+    el('td', {}, v.scored ? el('span', {class: 'tag good'}, `${v.labelled} of ${v.rolls} rolls labelled`) : el('span', {class: 'tag warn'}, 'no truth yet')),
+    ok.map(x => el('td', {class: 'c' + (selected.has(x.name) ? ' bold' : ' dim')}, x.ran.includes(v.name) ? '\u2713' : '\u2013'))));
+  $('#video-pick').replaceChildren(state.videos.length ? el('table', {},
+    el('thead', {}, el('tr', {}, el('th'), el('th', {}, 'Video'), el('th', {}, 'Truth'), ok.map(x => el('th', {class: 'c'}, x.name)))),
+    el('tbody', {}, rows)) : el('p', {class: 'dim', style: 'padding:0 10px'}, 'No videos yet.'));
   runButton();
 }
 function runButton() {
-  $('#run-go').disabled = !selected.size;
-  $('#run-go').textContent = selected.size > 1 ? `Compare ${selected.size} versions` : 'Score';
-  $('#run-own-l').style.display = selected.size > 1 ? '' : 'none';
+  const {vs, used} = scope(), n = vs.length;
+  $('#run-go').disabled = !n || !used.length;
+  $('#run-go').textContent = n > 1 ? `Compare ${n} versions` : 'Score';
+  $('#run-own-l').style.display = n > 1 ? '' : 'none';
+  const lost = picked.size - used.length, noTruth = used.filter(v => !v.scored).length;
+  $('#run-scope').className = 'small ' + (n && !used.length ? 'bad' : 'dim');
+  $('#run-scope').textContent = !n ? 'Tick at least one version.'
+    : !used.length ? (picked.size ? 'None of the ticked videos was run by ' + (n > 1 ? 'every ticked version.' : 'this version.') : 'The ticked versions have no video in common. Upload the same video for each of them.')
+    : `Will use ${used.length} video(s)` + (picked.size ? '' : n > 1 && !$('#run-own').checked ? ' (all the ticked versions share)' : ' (all)')
+      + (used.length <= 4 ? ': ' + used.map(v => v.name).join(', ') : '') + '.'
+      + (lost > 0 ? ` ${lost} ticked video(s) left out: not run by ${n > 1 ? 'every ticked version' : 'this version'}.` : '')
+      + (noTruth ? ` ${noTruth} of them ${noTruth === used.length ? 'have' : 'has'} no truth yet` + (noTruth === used.length ? ', so there will be no accuracy score.' : '.') : '');
 }
+$('#video-filter').oninput = renderVideos;
+$('#video-shared').onchange = renderVideos;
+$('#run-own').onchange = renderVideos;
+$('#video-all').onclick = () => { shownVideos().forEach(v => picked.add(v.name)); renderVideos(); };
+$('#video-none').onclick = () => { picked.clear(); renderVideos(); };
 $('#run-go').onclick = run;
-$('#run-videos').onkeydown = e => { if (e.key === 'Enter' && selected.size) run(); };
 async function run() {
   await guard($('#run-go'), async () => {
     $('#result').replaceChildren(el('p', {class: 'dim'}, 'Scoring...'));
     const order = state.versions.map(v => v.name).filter(n => selected.has(n));
-    try { renderResult(await api('/api/run', {versions: order, videos: $('#run-videos').value, own: $('#run-own').checked})); }
+    const videos = picked.size ? scope().used.map(v => v.name) : [];
+    try { renderResult(await api('/api/run', {versions: order, videos, own: $('#run-own').checked})); }
     catch (e) { $('#result').replaceChildren(); throw e; }
   });
   runButton();
