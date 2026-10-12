@@ -1,0 +1,74 @@
+====================================================================================================
+ KITTING VERSION SCORE   rec_v5 (det_v4 + ppocr_rec_fine_tuned_v5.onnx)
+====================================================================================================
+ folder   C:\Users\Tanvi\Documents\RTracker&OCR\rec_v5_logs_v1
+ scored on 5 labelled roll(s) in 5 video(s)   (this version ran 34 videos, 93 rolls)
+
+   OVERALL      50.1 / 100   grade D     end to end: right ply, right range, rolls found, speed
+   OCR          36.6 / 100   grade E     recognizer: judged only on the rolls the detector found
+   DETECTION   100.0 / 100   grade A     detector: rolls found, false rolls, labels covered, speed
+
+ OVERALL SCORE = 50.1
+   part                                              result  weight  points   detail
+   Ply decision (of all true rolls)                     55%    45.0    24.8   3 right of 5 (1 wrong + picked, 1 wrong, each wrong pick also costs 0.25 of a roll)
+   Range decided right (of all true rolls)               0%    15.0     0.0   0 exact, 0 close of 2 with a true range
+   Rolls found without false rolls (F1)                100%    15.0    15.0   5 of 5 true rolls found, 0 false roll(s)
+   Single ply reads right (before voting)                8%    10.0     0.8   10 of 123 reads
+   Single range reads right (before voting)              2%     5.0     0.1   credit 0.2 of 15 reads
+   Time to decide a roll                                96%     5.0     4.8   median 2.31 s, worst 14.3 s
+   Frame rate kept                                      94%     5.0     4.7   14.1 fps processed
+
+ OCR SCORE = 36.6
+   part                                              result  weight  points   detail
+   Ply decision (of rolls the detector found)           55%    55.0    30.3   3 right of 5 (1 wrong + picked, 1 wrong, each wrong pick also costs 0.25 of a roll)
+   Range decided right (of found rolls)                  0%    20.0     0.0   0 exact, 0 close of 2 with a true range
+   Single ply reads right (before voting)                8%    15.0     1.2   10 of 123 reads
+   Single range reads right (before voting)              2%     5.0     0.1   credit 0.2 of 15 reads
+   OCR time per crop                                   100%     5.0     5.0   mean 40.0 ms
+
+ DETECTION SCORE = 100.0
+   part                                              result  weight  points   detail
+   True rolls found                                    100%    40.0    40.0   5 of 5 true rolls found, 0 false roll(s)
+   Reported rolls that are real                        100%    25.0    25.0   5 of 5 true rolls found, 0 false roll(s)
+   Found rolls with enough label reads                 100%    20.0    20.0   5 of 5 found rolls
+   Detection time per frame                            100%    15.0    15.0   mean 24.9 ms
+
+ ply accuracy 3/5 = 60%, 95% interval 23% to 88%
+
+ BY RECORDING SESSION
+   session          videos  rolls  ply right  range exact  overall
+   19                    2      2        2/2          0/2     72.2
+   19_part2              3      3        1/3            -     44.7
+
+ OBSERVATIONS
+  [ALERT] 1 roll(s) were PICKED with a wrong ply (would go to a wrong bin): 19_part2_cam0_19_part2_11 roll 1
+          decided 71 / true 75 -> bin After-DW
+  [WARN] Only 5 labelled roll(s): the score is shaky. With this few, the true ply accuracy could be anywhere
+         from 23% to 88% (95% interval). Label at least 20 rolls before trusting small differences.
+  [WARN] 1 roll(s) where the true ply WAS read but the decision went elsewhere (voting / decision rule
+         problem, not the recognizer): 19_part2_cam0_19_part2_11 roll 1 true 75 read 1/24 times, decided '71'
+         (confirmed_in_sheet)
+  [WARN] 1 roll(s) where the true ply was NEVER read in any crop (recognizer or crop quality problem):
+         19_part2_cam0_19_part2_12 roll 1 true 76, 28 ply reads, most common '111' x4, '11' x3, '18' x3
+  [WARN] Read confidence: wrong reads average 0.73, right reads 0.90. 20% of the wrong reads have a score >=
+         0.9: the model is confidently wrong, so a score threshold will not filter these out.
+  [WARN] 33 of 52 decided ranges are not a valid 'low-high' range (e.g. '3.8-25.', '2113.7', '7.9-2.4',
+         '1.8-2W', '1.8'). No truth is needed to see these are wrong.
+  [WARN] Frame rate fell below 90% of the 15 fps target in 9 video(s) (frames were processed late):
+         19_part2_cam0_19_part2_15 12.4 fps; 19_part2_cam0_19_part2_6 13 fps; 19_part2_cam0_19_part2_8 13.1
+         fps; 19_part2_cam0_19_part2 13.2 fps; 19_part2_cam0_19_part2_3 13.2 fps; 19_part2_cam0_19_part2_2
+         13.3 fps; 19_part2_cam0_19_part2_9 13.3 fps; 19_part2_cam0_19_part2_4 13.4 fps ... and 1 more (see
+         the Rolls sheet)
+  [WARN] 3 roll(s) took 10 s or more to decide: oct_3_cam0_1 seq 2 14.29 s; oct_4_cam0_1 seq 11 10.67 s;
+         oct_3_Video Project 5 seq 2 10.17 s
+  [WARN] OCR queue backed up: a crop waited 222 ms (mean 3.0 ms). The recognizer is not keeping up with the
+         detector at peak.
+  [INFO] 29 of 34 videos have no truth yet and are not in the accuracy score (speed numbers use all videos).
+  [INFO] 2 roll(s) were flagged 'duplicate' by the run itself (same ply as an earlier roll): oct_3_cam0_4 seq
+         3 ply 111; oct_5_cam0_part3_1 seq 2 ply 71. If one is a re-tracked roll, mark it Real roll? = no in
+         the truth sheet; it then counts neither for nor against the detector.
+  [INFO] Single ply reads: 10 right of 123 (8%). Most common wrong reads: '11' x18, '1' x10, '111' x9, '23'
+         x6, '7' x5, '12' x4.
+  [INFO] Range: 0 exact and 0 close of 2 rolls with a true range; 0 had no range decided at all.
+  [INFO] Roll outcomes over all videos: picked 45, unreadable 24, not_in_master 11, range_unreadable 11,
+         duplicate 2 (of 93).

@@ -1,0 +1,28 @@
+{
+  "versions": [
+    {
+      "name": "rec_v5",
+      "folder": "C:\\Users\\Tanvi\\Documents\\RTracker&OCR\\rec_v5_logs_v1",
+      "block": 0,
+      "det": "det_v4",
+      "rec": "ppocr_rec_fine_tuned_v5.onnx",
+      "notes": ""
+    },
+    {
+      "name": "rec_v3_2",
+      "folder": "C:\\Users\\Tanvi\\Documents\\RTracker&OCR\\compare_rec_v3_vs_v3_2_v1",
+      "block": 0,
+      "det": "det_v4",
+      "rec": "ppocr_rec_fine_tuned_v3_2.onnx",
+      "notes": ""
+    },
+    {
+      "name": "rec_v4",
+      "folder": "C:\\Users\\Tanvi\\Documents\\RTracker&OCR\\compare_rec_v3_vs_v3_2_v1",
+      "block": 1,
+      "det": "det_v4",
+      "rec": "ppocr_rec_fine_tuned_v3.onnx",
+      "notes": ""
+    }
+  ]
+}

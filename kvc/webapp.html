@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kitting version comparison</title>
+<style>
+:root {
+  --bg: #f5f6f8; --card: #ffffff; --ink: #1c2330; --dim: #6b7585; --line: #dfe3ea; --accent: #2563eb;
+  --accent-ink: #ffffff; --good: #d9f2df; --good-ink: #17663a; --bad: #fbdcdc; --bad-ink: #a32222;
+  --warn: #fdf0c4; --warn-ink: #7a5a00; --input: #e8f1fc; --head: #eef1f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171c; --card: #1d2129; --ink: #e6e9ef; --dim: #98a2b3; --line: #313846; --accent: #5b8def;
+    --accent-ink: #0d1117; --good: #173a26; --good-ink: #8fdcaa; --bad: #4a1f1f; --bad-ink: #f3a3a3;
+    --warn: #453a12; --warn-ink: #edd27a; --input: #1f2c40; --head: #262c37;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
+header { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; padding: 12px 24px; background: var(--card);
+  border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+h1 { font-size: 17px; margin: 0; }
+h2 { font-size: 16px; margin: 0 0 10px; }
+h3 { font-size: 14px; margin: 18px 0 6px; }
+nav { display: flex; gap: 4px; }
+nav button { background: none; color: var(--dim); border: 0; border-bottom: 2px solid transparent; border-radius: 0;
+  padding: 8px 12px; font-weight: 600; }
+nav button.on { color: var(--accent); border-color: var(--accent); }
+main { max-width: 1500px; margin: 0 auto; padding: 20px 24px 60px; }
+section { display: none; }
+section.on { display: block; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.grow { flex: 1; }
+.dim { color: var(--dim); }
+.small { font-size: 12.5px; }
+button, .btn { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  padding: 6px 12px; border-radius: 6px; text-decoration: none; display: inline-block; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button:disabled { opacity: .5; cursor: default; }
+button.link { border: 0; background: none; color: var(--accent); padding: 2px 4px; }
+input[type=text], select { font: inherit; color: var(--ink); background: var(--card); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 8px; }
+label { display: inline-flex; gap: 6px; align-items: center; }
+#drop { border: 2px dashed var(--line); border-radius: 8px; padding: 22px; text-align: center; margin-bottom: 12px; }
+#drop.over { border-color: var(--accent); background: var(--input); }
+#msg { position: fixed; right: 20px; bottom: 20px; max-width: 520px; z-index: 9; display: grid; gap: 8px; }
+#msg div { padding: 10px 14px; border-radius: 8px; background: var(--good); color: var(--good-ink);
+  box-shadow: 0 4px 14px rgba(0,0,0,.2); white-space: pre-wrap; cursor: pointer; }
+#msg div.err { background: var(--bad); color: var(--bad-ink); }
+.scroll { overflow: auto; max-height: 72vh; border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; }
+th, td { padding: 5px 9px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; white-space: nowrap; }
+th { background: var(--head); position: sticky; top: 0; z-index: 1; font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.wrap { white-space: normal; min-width: 320px; }
+.good { background: var(--good); color: var(--good-ink); }
+.bad { background: var(--bad); color: var(--bad-ink); }
+.warn { background: var(--warn); color: var(--warn-ink); }
+.bold, .title { font-weight: 600; }
+tr.video td { background: var(--head); font-weight: 600; }
+#truth-table input, #truth-table select { background: var(--input); border-color: transparent; padding: 3px 6px; width: 100%; }
+#truth-table td { padding: 3px 6px; vertical-align: middle; }
+.tag { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+.cards { display: grid; gap: 12px; margin: 12px 0; }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 10px; }
+.tile { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.tile .n { font-size: 30px; font-weight: 700; line-height: 1.1; }
+.tile .n small { font-size: 14px; font-weight: 400; color: var(--dim); }
+.tile .t { font-weight: 600; letter-spacing: .04em; font-size: 12px; color: var(--dim); }
+.obs { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.obs li { display: grid; grid-template-columns: 58px 1fr; gap: 10px; align-items: start; }
+.obs .tag { text-align: center; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0 8px; }
+.tabs button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+pre { margin: 8px 0 0; padding: 12px; background: var(--head); border-radius: 6px; overflow: auto; font: 12.5px/1.4 Consolas, monospace; }
+ol.steps { margin: 0; padding-left: 20px; color: var(--dim); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Kitting version comparison</h1>
+  <nav>
+    <button data-tab="versions" class="on">1 &middot; Versions</button>
+    <button data-tab="truth">2 &middot; Truth</button>
+    <button data-tab="run">3 &middot; Score &amp; compare</button>
+  </nav>
+  <span class="grow"></span>
+  <span class="dim small" id="status"></span>
+</header>
+<main>
+
+<section id="tab-versions" class="on">
+  <div class="card">
+    <h2>Add a version</h2>
+    <div id="drop">
+      <div><b>Drop the result workbooks here</b> (the .xlsx files of one version folder, including the summary workbook)</div>
+      <div class="row" style="justify-content:center;margin-top:10px">
+        <button id="pick-files">Choose files</button>
+        <button id="pick-dir">Choose folder</button>
+        <span id="picked" class="dim">nothing chosen</span>
+      </div>
+      <input type="file" id="in-files" multiple accept=".xlsx" hidden>
+      <input type="file" id="in-dir" webkitdirectory hidden>
+    </div>
+    <div class="row">
+      <input type="text" id="names" class="grow" placeholder="Version name (optional, e.g. rec_v6). Side-by-side workbooks: two names, comma-separated">
+      <input type="text" id="notes" class="grow" placeholder="Notes (optional, e.g. Hailo, Pi 5)">
+      <label><input type="checkbox" id="replace"> Replace if the name exists</label>
+      <button class="primary" id="upload" disabled>Upload &amp; register</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Registered versions</h2>
+    <div id="versions"></div>
+    <p class="dim small">Scores here use each version's own videos. Use <b>Score &amp; compare</b> for a like-for-like comparison on shared videos.</p>
+  </div>
+</section>
+
+<section id="tab-truth">
+  <div class="card">
+    <div class="row">
+      <h2 style="margin:0">Truth sheet</h2>
+      <span id="truth-info" class="dim"></span>
+      <span class="grow"></span>
+      <input type="text" id="truth-filter" placeholder="Filter videos...">
+      <label><input type="checkbox" id="truth-todo"> Only videos not labelled yet</label>
+      <button id="truth-add">+ Add a missing roll</button>
+      <a class="btn" href="/truth.xlsx">Download truth.xlsx</a>
+      <button id="truth-up">Upload truth.xlsx</button>
+      <input type="file" id="in-truth" accept=".xlsx" hidden>
+      <button class="primary" id="truth-save" disabled>Save</button>
+    </div>
+    <ol class="steps small" style="margin-top:10px">
+      <li>Type the real ply and range of <b>every roll of a video</b> in the blue cells (leave True range empty if the roll has no range label).</li>
+      <li>Set <b>Real roll? = no</b> for a row that is not a roll, or is the same roll tracked a second time.</li>
+      <li>A roll no version found: <b>+ Add a missing roll</b> (video name, roughly when it first appears, true values).</li>
+    </ol>
+    <ul id="truth-issues" class="obs" style="margin-top:10px"></ul>
+  </div>
+  <div class="scroll"><table id="truth-table"></table></div>
+</section>
+
+<section id="tab-run">
+  <div class="card">
+    <h2>Score &amp; compare</h2>
+    <div class="row" id="run-versions"></div>
+    <div class="row" style="margin-top:10px">
+      <input type="text" id="run-videos" class="grow" placeholder="Only these videos (optional, wildcards, comma-separated: oct_3_*,19_part2_*)">
+      <label id="run-own-l"><input type="checkbox" id="run-own"> Score each version on its own videos (not like for like)</label>
+      <button class="primary" id="run-go" disabled>Score</button>
+    </div>
+    <p class="dim small" style="margin-bottom:0">One version = its score. Two or more = a comparison on the videos they all ran.</p>
+  </div>
+  <div id="result"></div>
+</section>
+
+</main>
+<div id="msg"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+function el(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === 'class') e.className = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (k in e && k !== 'list') e[k] = v;
+    else e.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) e.append(kid);
+  return e;
+}
+function say(text, err) {
+  const d = el('div', {class: err ? 'err' : '', onclick: () => d.remove()}, text);
+  $('#msg').append(d);
+  if (!err) setTimeout(() => d.remove(), 6000);
+}
+async function api(path, body, raw) {
+  const opt = body === undefined ? {} : {method: 'POST', headers: {'X-KVC': '1'}, body: raw ? body : JSON.stringify(body)};
+  let r;
+  try { r = await fetch(path, opt); }
+  catch (e) { throw new Error('The server is not running. Start it again with kvc_web.bat (or: python kvc_web.py).'); }
+  const j = await r.json().catch(() => ({error: r.statusText}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+async function guard(btn, fn) {
+  if (btn) btn.disabled = true;
+  try { return await fn(); }
+  catch (e) { say(e.message, true); }
+  finally { if (btn) btn.disabled = false; }
+}
+const fmt = (x, d = 1) => x == null ? '-' : Number(x).toFixed(d);
+const GRADE = {A: 'good', B: 'good', C: 'warn', D: 'warn', E: 'bad'};
+const LEVEL = {ALERT: 'bad', WARN: 'warn', INFO: ''};
+
+// ------------------------------------------------------------ tabs
+let state = {versions: []}, selected = new Set(), dirty = false;
+function show(tab) {
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  document.querySelectorAll('section').forEach(s => s.classList.toggle('on', s.id === 'tab-' + tab));
+  if (tab === 'truth' && !dirty) loadTruth();
+  if (tab !== 'truth') refresh();
+}
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => show(b.dataset.tab));
+window.addEventListener('beforeunload', e => { if (dirty) e.preventDefault(); });
+
+// ------------------------------------------------------------ versions
+let files = [];
+function pick(list) {
+  files = [...list].filter(f => /\.xlsx$/i.test(f.name) && !f.name.startsWith('~$'));
+  $('#picked').textContent = files.length ? `${files.length} workbook(s) chosen` : 'no .xlsx files in that selection';
+  $('#upload').disabled = !files.length;
+}
+$('#pick-files').onclick = () => $('#in-files').click();
+$('#pick-dir').onclick = () => $('#in-dir').click();
+$('#in-files').onchange = e => pick(e.target.files);
+$('#in-dir').onchange = e => pick(e.target.files);
+const drop = $('#drop');
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); pick(e.dataTransfer.files); };
+
+$('#upload').onclick = () => guard($('#upload'), async () => {
+  const batch = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+  for (const [i, f] of files.entries()) {
+    $('#picked').textContent = `uploading ${i + 1} of ${files.length}: ${f.name}`;
+    await api(`/api/upload?batch=${batch}&name=${encodeURIComponent(f.name)}`, f, true);
+  }
+  $('#picked').textContent = 'reading the workbooks...';
+  try {
+    const r = await api('/api/add', {batch, names: $('#names').value, notes: $('#notes').value, replace: $('#replace').checked});
+    say(r.log);
+    files = []; $('#names').value = $('#notes').value = ''; $('#replace').checked = false;
+    $('#in-files').value = $('#in-dir').value = '';
+    $('#picked').textContent = 'nothing chosen';
+    selected = new Set(r.names);
+  } catch (e) {
+    $('#picked').textContent = `${files.length} workbook(s) chosen`;
+    throw e;
+  } finally { await refresh(); $('#upload').disabled = !files.length; }
+}).then(() => { $('#upload').disabled = !files.length; });
+
+async function refresh() {
+  try { state = await api('/api/state'); } catch (e) { say(e.message, true); return; }
+  const names = new Set(state.versions.map(v => v.name));
+  selected = new Set([...selected].filter(n => names.has(n)));
+  const t = state.truth;
+  $('#status').textContent = `${state.versions.length} version(s) · truth: ${t.rolls} rolls in ${t.videos} videos, ${t.labelled} labelled`;
+  renderVersions(); renderRunPicker();
+}
+function renderVersions() {
+  const box = $('#versions');
+  if (!state.versions.length) { box.replaceChildren(el('p', {class: 'dim'}, 'No versions yet. Upload the result workbooks of one above.')); return; }
+  const head = ['Version', 'Detector + recognizer', 'Videos', 'Rolls', 'Labelled', 'Overall', 'OCR', 'Detection', 'Notes', ''];
+  const rows = state.versions.map(v => {
+    const remove = el('button', {class: 'link', onclick: () => removeVersion(v)}, 'Remove');
+    if (v.error) return el('tr', {}, el('td', {class: 'bold'}, v.name), el('td', {class: 'bad wrap', colSpan: 8}, v.error), el('td', {}, remove));
+    const s = v.scores;
+    return el('tr', {title: v.folder},
+      el('td', {class: 'bold'}, v.name),
+      el('td', {}, `${v.det || '?'} + ${v.rec || '?'}`),
+      el('td', {class: 'num'}, v.videos), el('td', {class: 'num'}, v.rolls), el('td', {class: 'num'}, v.labelled),
+      el('td', {class: 'num'}, fmt(s.overall), ' ', s.overall == null ? '' : el('span', {class: 'tag ' + GRADE[v.grade]}, v.grade)),
+      el('td', {class: 'num'}, fmt(s.ocr)), el('td', {class: 'num'}, fmt(s.det)),
+      el('td', {class: 'dim'}, v.notes || (v.uploaded ? '' : 'folder on this computer')),
+      el('td', {}, el('button', {class: 'link', onclick: () => { selected = new Set([v.name]); show('run'); run(); }}, 'Score'), remove));
+  });
+  box.replaceChildren(el('div', {class: 'scroll'}, el('table', {},
+    el('thead', {}, el('tr', {}, head.map((h, i) => el('th', {class: i >= 2 && i <= 7 ? 'num' : ''}, h)))), el('tbody', {}, rows))));
+}
+async function removeVersion(v) {
+  if (!confirm(`Remove version ${v.name}?` + (v.uploaded ? '\nIts uploaded workbooks are deleted too.' : '\nIts workbooks stay where they are.') + '\nThe truth sheet is not touched.')) return;
+  await guard(null, async () => { say((await api('/api/remove', {name: v.name})).log); });
+  refresh();
+}
+
+// ------------------------------------------------------------ truth
+let truth = null, extra = [];
+function markDirty(on = true) { dirty = on; $('#truth-save').disabled = !on; $('#truth-save').textContent = on ? 'Save changes' : 'Saved'; }
+async function loadTruth() {
+  await guard(null, async () => { truth = await api('/api/truth'); extra = []; markDirty(false); renderTruth(); });
+}
+const filled = r => r.ply || r.rng || r.real;
+function field(row, key, width) {
+  return el('input', {type: 'text', value: row[key] ?? '', style: width ? `min-width:${width}px` : '',
+    oninput: e => { row[key] = e.target.value; markDirty(); }});
+}
+function realSelect(row) {
+  return el('select', {onchange: e => { row.real = e.target.value; markDirty(); }},
+    ['', 'yes', 'no'].map(o => el('option', {value: o, selected: row.real === o}, o)));
+}
+function renderTruth() {
+  if (!truth) return;
+  const q = $('#truth-filter').value.trim().toLowerCase(), todo = $('#truth-todo').checked;
+  const nv = truth.versions.length, cols = 6 + nv;
+  const vids = truth.videos, rolls = vids.reduce((n, v) => n + v.rows.length, 0);
+  const done = vids.filter(v => v.rows.some(r => r.ply || r.rng || r.real === 'no')).length;
+  $('#truth-info').textContent = vids.length ? `${rolls} rolls in ${vids.length} videos · ${done} labelled, ${vids.length - done} still empty`
+    : 'No rolls yet: add a version first.';
+  $('#truth-issues').replaceChildren(...truth.issues.map(t => el('li', {}, el('span', {class: 'tag warn'}, 'WARN'), el('span', {}, t))));
+  const body = [];
+  for (const v of vids) {
+    const n = v.rows.filter(filled).length;
+    if (q && !v.video.toLowerCase().includes(q)) continue;
+    if (todo && n === v.rows.length && n) continue;
+    body.push(el('tr', {class: 'video'}, el('td', {colSpan: cols}, v.video, ' ',
+      el('span', {class: 'tag ' + (!n ? '' : n === v.rows.length ? 'good' : 'warn')}, v.rows.length ? `${n}/${v.rows.length} filled` : 'no rolls reported'))));
+    for (const r of v.rows) {
+      body.push(el('tr', {}, el('td', {class: 'num'}, r.n), el('td', {class: 'num'}, r.t ?? ''),
+        el('td', {}, realSelect(r)), el('td', {}, field(r, 'ply', 70)), el('td', {}, field(r, 'rng', 110)), el('td', {}, field(r, 'notes', 160)),
+        r.ref.map(x => el('td', {class: x && x.length ? '' : 'dim'}, x === null ? '(video not run)' : !x.length ? '(not found)'
+          : `${x[0] || '-'}  ·  ${x[1] || '-'}  ·  ${x[2] || '-'}`))));
+    }
+  }
+  if (extra.length) {
+    body.push(el('tr', {class: 'video'}, el('td', {colSpan: cols}, 'Missing rolls to add (video name exactly as above, and roughly when the roll first appears)')));
+    for (const r of extra) {
+      body.push(el('tr', {}, el('td', {}, el('input', {type: 'text', value: r.video, placeholder: 'video', list: 'video-names', style: 'min-width:220px',
+          oninput: e => { r.video = e.target.value; markDirty(); }})),
+        el('td', {}, field(r, 't', 70)), el('td', {}, realSelect(r)), el('td', {}, field(r, 'ply', 70)), el('td', {}, field(r, 'rng', 110)),
+        el('td', {}, field(r, 'notes', 160)),
+        el('td', {colSpan: Math.max(nv, 1)}, el('button', {class: 'link', onclick: () => { extra.splice(extra.indexOf(r), 1); renderTruth(); }}, 'discard'))));
+    }
+  }
+  $('#truth-table').replaceChildren(
+    el('thead', {}, el('tr', {}, ['Roll #', 'First seen (s)', 'Real roll?', 'True ply', 'True range', 'Notes'].map(h => el('th', {}, h)),
+      truth.versions.map(n => el('th', {}, `${n}: ply · range · status`)))),
+    el('tbody', {}, body),
+    el('datalist', {id: 'video-names'}, vids.map(v => el('option', {value: v.video}))));
+}
+$('#truth-filter').oninput = renderTruth;
+$('#truth-todo').onchange = renderTruth;
+$('#truth-add').onclick = () => {
+  extra.push({video: '', t: '', real: '', ply: '', rng: '', notes: ''});
+  renderTruth(); $('#truth-table').parentElement.scrollTop = 1e9;
+};
+$('#truth-save').onclick = () => guard($('#truth-save'), async () => {
+  const bad = extra.filter(r => !r.video.trim() || r.t === '' || isNaN(Number(r.t)));
+  if (bad.length) throw new Error('Each missing roll needs a video name and a first-seen time in seconds (or discard the row).');
+  const rows = truth.videos.flatMap(v => v.rows.map(r => ({video: v.video, n: r.n, t: r.t, real: r.real, ply: r.ply, rng: r.rng, notes: r.notes})))
+    .concat(extra.map(r => ({...r, n: null})));
+  const r = await api('/api/truth', {rows});
+  say(`Truth saved: ${r.rolls} rolls, ${r.labelled} video(s) labelled.`);
+  await loadTruth(); refresh();
+});
+$('#truth-up').onclick = () => $('#in-truth').click();
+$('#in-truth').onchange = e => guard($('#truth-up'), async () => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f || (dirty && !confirm('Replace the truth with this file? Your unsaved changes on this page are lost.'))) return;
+  const r = await api('/api/truth/upload', f, true);
+  say(`Truth sheet replaced: ${r.rolls} rolls. The previous one is in truth/backups.`);
+  await loadTruth(); refresh();
+});
+
+// ------------------------------------------------------------ score & compare
+function renderRunPicker() {
+  const ok = state.versions.filter(v => !v.error);
+  $('#run-versions').replaceChildren(...(ok.length ? ok.map(v => el('label', {class: 'btn'},
+    el('input', {type: 'checkbox', checked: selected.has(v.name), onchange: e => { e.target.checked ? selected.add(v.name) : selected.delete(v.name); runButton(); }}),
+    v.name, el('span', {class: 'dim small'}, `${v.labelled} labelled`))) : [el('span', {class: 'dim'}, 'No versions yet: add one in the Versions tab.')]));
+  runButton();
+}
+function runButton() {
+  $('#run-go').disabled = !selected.size;
+  $('#run-go').textContent = selected.size > 1 ? `Compare ${selected.size} versions` : 'Score';
+  $('#run-own-l').style.display = selected.size > 1 ? '' : 'none';
+}
+$('#run-go').onclick = run;
+$('#run-videos').onkeydown = e => { if (e.key === 'Enter' && selected.size) run(); };
+async function run() {
+  await guard($('#run-go'), async () => {
+    $('#result').replaceChildren(el('p', {class: 'dim'}, 'Scoring...'));
+    const order = state.versions.map(v => v.name).filter(n => selected.has(n));
+    try { renderResult(await api('/api/run', {versions: order, videos: $('#run-videos').value, own: $('#run-own').checked})); }
+    catch (e) { $('#result').replaceChildren(); throw e; }
+  });
+  runButton();
+}
+function obsList(items) {
+  if (!items.length) return el('p', {class: 'dim'}, 'Nothing unusual found.');
+  return el('ul', {class: 'obs'}, items.map(o => el('li', {}, el('span', {class: 'tag ' + LEVEL[o.level]}, o.level), el('span', {}, o.text))));
+}
+function cellTd(c, header) {
+  let v = c, s = '';
+  if (c && typeof c === 'object') { v = c.v; s = c.s || ''; }
+  const num = typeof v === 'number';
+  if (num && !Number.isInteger(v)) v = +v.toFixed(3);
+  return el(header ? 'th' : 'td', {class: [s === 'header' || s === 'input' || s === 'text' ? '' : s, num ? 'num' : ''].join(' ').trim()}, v ?? '');
+}
+function sheetTable(sh) {
+  const width = Math.max(...sh.rows.map(r => r.length), 1);
+  const tr = (r, h) => el('tr', {}, r.map(c => cellTd(c, h)), Array.from({length: width - r.length}, () => el(h ? 'th' : 'td')));
+  return el('div', {class: 'scroll'}, el('table', {},
+    el('thead', {}, sh.rows.slice(0, sh.header_rows).map(r => tr(r, true))),
+    el('tbody', {}, sh.rows.slice(sh.header_rows).map(r => tr(r, false)))));
+}
+function renderResult(r) {
+  const out = [];
+  const top = el('div', {class: 'card'},
+    el('div', {class: 'row'}, el('h2', {style: 'margin:0'}, (r.kind === 'score' ? 'Score: ' : 'Comparison: ') + r.title), el('span', {class: 'grow'}),
+      el('a', {class: 'btn', href: `/reports/${encodeURIComponent(r.report)}/report.xlsx`}, 'Download report.xlsx'),
+      el('a', {class: 'btn', href: `/reports/${encodeURIComponent(r.report)}/report.txt`, target: '_blank'}, 'report.txt')),
+    r.lines.map(l => el('div', {class: 'dim'}, l)),
+    el('div', {class: 'cards'}, r.cards.map(c => el('div', {},
+      r.cards.length > 1 ? el('h3', {}, c.label) : null,
+      el('div', {class: 'tiles'}, c.scores.map(s => el('div', {class: 'tile', title: s.what},
+        el('div', {class: 't'}, s.title),
+        el('div', {class: 'n'}, s.score == null ? '-' : fmt(s.score), el('small', {}, s.score == null ? ' needs truth' : ' / 100 '),
+          s.score == null ? null : el('span', {class: 'tag ' + GRADE[s.grade]}, s.grade)),
+        el('div', {class: 'dim small'}, s.what))))))));
+  out.push(top);
+
+  if (r.matrix) {
+    out.push(el('div', {class: 'card'}, el('h2', {}, 'Side by side'), el('div', {class: 'scroll'}, el('table', {},
+      el('thead', {}, el('tr', {}, el('th'), r.cards.map(c => el('th', {class: 'num'}, c.name)))),
+      el('tbody', {}, r.matrix.map(row => row === null ? el('tr', {}, el('td', {colSpan: r.cards.length + 1}, ' '))
+        : el('tr', {}, el('td', {}, row.label), row.cells.map(c => el('td', {class: 'num' + (c.best ? ' good bold' : '')}, c.text))))))),
+      el('p', {class: 'dim small', style: 'margin-bottom:0'}, 'Green = best of the compared versions.')));
+  }
+  for (const b of r.breakdown || []) {
+    out.push(el('div', {class: 'card'}, el('h2', {}, `${b.title} score = ${fmt(b.score)}`), el('div', {class: 'scroll'}, el('table', {},
+      el('thead', {}, el('tr', {}, ['Part', 'Result', 'Weight', 'Points', 'Detail'].map((h, i) => el('th', {class: i && i < 4 ? 'num' : ''}, h)))),
+      el('tbody', {}, b.parts.map(p => el('tr', {}, el('td', {}, p.label), el('td', {class: 'num'}, p.result), el('td', {class: 'num'}, fmt(p.weight)),
+        el('td', {class: 'num bold'}, fmt(p.points)), el('td', {class: 'dim'}, p.detail)))))),
+      b.left_out.length ? el('p', {class: 'dim small', style: 'margin-bottom:0'}, `No data for: ${b.left_out.join(', ')}; weights rescaled to 100.`) : null));
+  }
+  out.push(el('div', {class: 'card'}, el('h2', {}, 'Observations'), obsList(r.observations),
+    r.groups.map(g => [el('h3', {}, g.title), obsList(g.items)])));
+
+  const holder = el('div'), tabs = el('div', {class: 'tabs'});
+  const open = i => { [...tabs.children].forEach((b, j) => b.classList.toggle('on', i === j)); holder.replaceChildren(sheetTable(r.sheets[i])); };
+  r.sheets.forEach((sh, i) => tabs.append(el('button', {onclick: () => open(i)}, sh.name)));
+  out.push(el('div', {class: 'card'}, el('h2', {}, 'Details'), tabs, holder,
+    el('details', {style: 'margin-top:12px'}, el('summary', {class: 'dim'}, 'Plain text report'), el('pre', {}, r.text))));
+  $('#result').replaceChildren(...out);
+  open(Math.max(0, r.sheets.findIndex(s => s.name === 'Rolls')));
+}
+
+refresh();
+</script>
+</body>
+</html>

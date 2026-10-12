@@ -1,0 +1,122 @@
+====================================================================================================
+ KITTING VERSION COMPARISON   rec_v3_2  vs  rec_v4  vs  rec_v5
+====================================================================================================
+   rec_v3_2 (det_v4 + ppocr_rec_fine_tuned_v3_2.onnx)
+   rec_v4 (det_v4 + ppocr_rec_fine_tuned_v3.onnx)
+   rec_v5 (det_v4 + ppocr_rec_fine_tuned_v5.onnx)
+ Like for like on the 9 videos every version ran (5 of them labelled).
+
+                                                         rec_v3_2        rec_v4        rec_v5
+   OVERALL score                                             26.7          38.3        * 50.3
+   OCR score                                                  8.1          22.4        * 36.6
+   DETECTION score                                          100.0         100.0         100.0
+   Grade (overall)                                              E             E             D
+
+   Ply decision (of all true rolls)                          0.0%         30.0%       * 55.0%
+   Ply decision (of rolls the detector found)                0.0%         30.0%       * 55.0%
+   Range decided right (of all true rolls)                * 12.5%          0.0%          0.0%
+   True rolls found                                        100.0%        100.0%        100.0%
+   Reported rolls that are real                            100.0%        100.0%        100.0%
+   Found rolls with enough label reads                     100.0%        100.0%        100.0%
+   Single ply reads right (before voting)                    1.1%          6.3%        * 8.1%
+   Single range reads right (before voting)                * 9.3%          0.0%          1.7%
+
+   Ply right / labelled                                       0/5           2/5           3/5
+   Picked with a wrong ply                                      4             2           * 1
+   Rolls missed                                                 0             0             0
+   False rolls                                                  0             0             0
+   Range exact / labelled                                     0/2           0/2           0/2
+
+   fps processed                                           * 14.5        * 14.5          14.4
+   Detection mean (ms)                                     * 20.6          20.7          24.9
+   OCR mean (ms)                                           * 23.9          29.2          34.7
+   Median time to decide (s)                                 3.00          3.00        * 2.31
+   Rolls reported                                              37            37            37
+
+   * = best of the compared versions
+
+ OBSERVATIONS
+  [WARN] The ranking rests on only 5 labelled roll(s). One roll changes the ply accuracy by 20%; label at
+         least 20 before calling a winner.
+  [WARN] Rolls rec_v4 gets right and rec_v3_2 gets wrong: 19_cam0_19_4 roll 1 (true 235, rec_v3_2 decided
+         '233'); 19_cam0_19_6 roll 1 (true 124, rec_v3_2 decided '111')
+  [WARN] Rolls rec_v5 gets right and rec_v3_2 gets wrong: 19_cam0_19_4 roll 1 (true 235, rec_v3_2 decided
+         '233'); 19_cam0_19_6 roll 1 (true 124, rec_v3_2 decided '111'); 19_part2_cam0_19_part2_7 roll 1 (true
+         73, rec_v3_2 decided '81')
+  [WARN] Rolls rec_v5 gets right and rec_v4 gets wrong: 19_part2_cam0_19_part2_7 roll 1 (true 73, rec_v4
+         decided '100')
+  [INFO] Overall ranking: rec_v5 50.3 > rec_v4 38.3 > rec_v3_2 26.7.
+  [INFO] Detection scores are within 1 point of each other (rec_v3_2 100.0, rec_v4 100.0, rec_v5 100.0): no
+         real difference there.
+  [INFO] rec_v3_2 vs rec_v4: same ply decided on 7 of 37 rolls both reported (19% agreement, truth not needed
+         for this).
+  [INFO] rec_v3_2 vs rec_v4 on the 5 labelled rolls both ran: both right 0, only rec_v3_2 right 0, only rec_v4
+         right 2, both wrong 3. This is NOT enough to call one better (sign test p = 0.50; it needs to be <=
+         0.05) - more labelled rolls are needed.
+  [INFO] rec_v3_2 vs rec_v5: same ply decided on 6 of 37 rolls both reported (16% agreement, truth not needed
+         for this).
+  [INFO] rec_v3_2 vs rec_v5 on the 5 labelled rolls both ran: both right 0, only rec_v3_2 right 0, only rec_v5
+         right 3, both wrong 2. This is NOT enough to call one better (sign test p = 0.25; it needs to be <=
+         0.05) - more labelled rolls are needed.
+  [INFO] rec_v4 vs rec_v5: same ply decided on 11 of 37 rolls both reported (30% agreement, truth not needed
+         for this).
+  [INFO] rec_v4 vs rec_v5 on the 5 labelled rolls both ran: both right 2, only rec_v4 right 0, only rec_v5
+         right 1, both wrong 2. This is NOT enough to call one better (sign test p = 1.00; it needs to be <=
+         0.05) - more labelled rolls are needed.
+  [INFO] OCR time per crop: rec_v3_2 23.9 ms, rec_v4 29.2 ms, rec_v5 34.7 ms (45% slower at worst). Speeds are
+         only comparable when the runs were made on the same machine under the same load.
+  [INFO] Median time to decide: rec_v5 2.3 s, rec_v3_2 3.0 s, rec_v4 3.0 s (30% slower at worst). Speeds are
+         only comparable when the runs were made on the same machine under the same load.
+  [INFO] rec_v5: 25 of its videos are not in this comparison because another version did not run them
+         (19_cam0_19_1; 19_cam0_19_2; 19_cam0_19_3; 19_cam0_19_5; 19_cam0_19_7; 19_part2_cam0_19_part2;
+         19_part2_cam0_19_part2_2; 19_part2_cam0_19_part2_3 ... and 17 more (see the Rolls sheet)). Use --all-
+         videos to score each version on its own set.
+
+ rec_v3_2: its own alerts
+  [ALERT] 4 roll(s) were PICKED with a wrong ply (would go to a wrong bin): 19_cam0_19_4 roll 1 decided 233 /
+          true 235 -> bin After-DW; 19_cam0_19_6 roll 1 decided 111 / true 124 -> bin Before-DW;
+          19_part2_cam0_19_part2_7 roll 1 decided 81 / true 73 -> bin Before-DW; 19_part2_cam0_19_part2_11
+          roll 1 decided 87 / true 75 -> bin Before-DW
+  [WARN] 1 roll(s) where the true ply WAS read but the decision went elsewhere (voting / decision rule
+         problem, not the recognizer): 19_part2_cam0_19_part2_7 roll 1 true 73 read 2/50 times, decided '81'
+         (latest_in_sheet)
+  [WARN] 4 roll(s) where the true ply was NEVER read in any crop (recognizer or crop quality problem):
+         19_cam0_19_4 roll 1 true 235, 17 ply reads, most common '233' x3, '133' x2, '13' x2; 19_cam0_19_6
+         roll 1 true 124, 19 ply reads, most common '1211' x12, '111' x3, '1021' x1; 19_part2_cam0_19_part2_11
+         roll 1 true 75, 70 ply reads, most common '15' x37, '1' x7, '71' x3; 19_part2_cam0_19_part2_12 roll 1
+         true 76, 27 ply reads, most common '1' x11, '10' x3, '111' x2
+  [WARN] Read confidence: wrong reads average 0.83, right reads 0.85. 45% of the wrong reads have a score >=
+         0.9: the model is confidently wrong, so a score threshold will not filter these out.
+  [WARN] 17 of 18 decided ranges are not a valid 'low-high' range (e.g. '9-8', '11.8-20.', '1.7', '51.5',
+         '381-U.1'). No truth is needed to see these are wrong.
+  [WARN] 3 roll(s) took 10 s or more to decide: oct_4_cam0_2 seq 3 14.73 s; oct_4_cam0_2 seq 4 13.27 s;
+         oct_4_cam0_2 seq 12 11.6 s
+
+ rec_v4: its own alerts
+  [ALERT] 2 roll(s) were PICKED with a wrong ply (would go to a wrong bin): 19_part2_cam0_19_part2_7 roll 1
+          decided 100 / true 73 -> bin Before-DW; 19_part2_cam0_19_part2_11 roll 1 decided 101 / true 75 ->
+          bin Before-DW
+  [WARN] 1 roll(s) where the true ply WAS read but the decision went elsewhere (voting / decision rule
+         problem, not the recognizer): 19_part2_cam0_19_part2_7 roll 1 true 73 read 6/53 times, decided '100'
+         (latest_in_sheet)
+  [WARN] 2 roll(s) where the true ply was NEVER read in any crop (recognizer or crop quality problem):
+         19_part2_cam0_19_part2_11 roll 1 true 75, 76 ply reads, most common '15' x33, '1' x14, '7' x6;
+         19_part2_cam0_19_part2_12 roll 1 true 76, 26 ply reads, most common '11' x6, '1' x4, '111' x3
+  [WARN] Read confidence: wrong reads average 0.79, right reads 0.87. 36% of the wrong reads have a score >=
+         0.9: the model is confidently wrong, so a score threshold will not filter these out.
+  [WARN] 16 of 17 decided ranges are not a valid 'low-high' range (e.g. '1.7', '1.10', '5.', '1.', '1.2-7.').
+         No truth is needed to see these are wrong.
+  [WARN] 1 roll(s) took 10 s or more to decide: oct_4_cam0_2 seq 12 11.59 s
+
+ rec_v5: its own alerts
+  [ALERT] 1 roll(s) were PICKED with a wrong ply (would go to a wrong bin): 19_part2_cam0_19_part2_11 roll 1
+          decided 71 / true 75 -> bin After-DW
+  [WARN] 1 roll(s) where the true ply WAS read but the decision went elsewhere (voting / decision rule
+         problem, not the recognizer): 19_part2_cam0_19_part2_11 roll 1 true 75 read 1/24 times, decided '71'
+         (confirmed_in_sheet)
+  [WARN] 1 roll(s) where the true ply was NEVER read in any crop (recognizer or crop quality problem):
+         19_part2_cam0_19_part2_12 roll 1 true 76, 28 ply reads, most common '111' x4, '11' x3, '18' x3
+  [WARN] Read confidence: wrong reads average 0.73, right reads 0.90. 20% of the wrong reads have a score >=
+         0.9: the model is confidently wrong, so a score threshold will not filter these out.
+  [WARN] 13 of 19 decided ranges are not a valid 'low-high' range (e.g. '1.8-2W', '8.2-UW', '2.9-UW',
+         '3..2-20.4', '1.'). No truth is needed to see these are wrong.
