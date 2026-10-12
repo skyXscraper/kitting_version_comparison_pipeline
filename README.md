@@ -25,22 +25,22 @@ python kvc_web.py          (or double-click kvc_web.bat)
 ```
 
 Opens `http://127.0.0.1:8000` in the browser; keep the console window open while you use it (`--port N` for
-another port). It does everything the commands below do, on the same `versions.json`, truth sheet, `config.json`
-and `reports\`, so the page and the command line can be mixed.
+another port). One page, nothing to register:
 
-1. **Versions** - drop result workbooks and press *Upload*: any models, any videos, even a single sheet. Each
-   workbook is sorted into the version of the model written in it (`rec v5` -> `rec_v5`; a side-by-side workbook
-   feeds two versions). A version that already exists gets the new videos added; the same video uploaded again
-   replaces the old one. Give a name only when all the workbooks are of one model. Files are kept in `uploads\`.
-2. **Truth** - type the true ply / range in the blue cells and *Save*; or download `truth.xlsx`, fill it in Excel
-   and upload it again. A video needs truth before it gets an accuracy score.
-3. **Score & compare** - tick one version for its score, two or more for a comparison, and tick the video(s) to
-   use (none = all; a comparison uses the videos every ticked version ran). The table shows which version ran
-   which video. Scores, breakdown, observations and per-roll tables are shown on the page, with a link to the
-   saved `report.xlsx`.
+1. Drop the result sheets to compare: one `.xlsx` per model version, all of the **same video** (the sheets
+   usually have the same file name in different folders, so choose again to add the next one). A side-by-side
+   sheet counts as two versions. One sheet alone gives that version's score.
+2. Press **Compare**. Each version is named after the model written in its sheet (`rec v5` -> `rec_v5`; a second
+   sheet of the same model becomes `rec_v5_2`).
+3. Type the true ply / range of the video's rolls in the blue cells and press **Save truth & score again**.
 
-Speed parts of the score (frame rate, detection / OCR time) come from the summary workbook; a video uploaded
-without one is scored on accuracy only and the weights are rescaled.
+The scores, side-by-side table, observations and per-roll tables are shown on the page; *Download as Excel* gives
+the same report as a workbook. The uploaded sheets are only read: they are not kept, nothing is added to
+`versions.json` and no report folder is written. The one thing kept is the truth you type (`truth	ruth.xlsx`,
+shared with the command line), so a video's true values are entered once.
+
+Speed parts of the score (frame rate, detection / OCR time) come from the summary workbook; drop it in together
+with the sheets to get them, otherwise the score is accuracy only and the weights are rescaled.
 
 The page is served to this computer only.
 
@@ -148,7 +148,6 @@ Each report lists what looks abnormal, most serious first:
 kvc.py / kvc.bat     entry point (command line)
 kvc_web.py / .bat    entry point (web page)
 kvc\                 the code (xlsx_io, loader, truth, scoring, observations, report, cli, webapp)
-uploads\             workbooks uploaded through the web page, one folder per version
 versions.json        registered versions (written by add / remove)
 config.json          scoring weights and thresholds
 truth\truth.xlsx     the truth sheet;  truth\backups\  earlier copies

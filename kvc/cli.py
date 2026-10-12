@@ -133,13 +133,13 @@ def cmd_truth(a):
     _refresh_truth(load_config())
 
 
-def score_version(ver, cfg, truth, issues, videos=None):
+def score_version(ver, cfg, truth, issues, videos=None, save=True):
     """Score one version and save its report -> {res, obs, text, sheets, out}. Used by the command line and the web page."""
     res = evaluate(ver, truth, cfg, _filter(ver.videos, videos, ver.name) if videos else None)
     obs = observe(res, cfg, issues)
     text = report.score_text(res, obs, cfg)
     sheets = report.score_sheets(res, obs, cfg)
-    return {"res": res, "obs": obs, "text": text, "sheets": sheets, "out": _save("score", ver.name, text, sheets)}
+    return {"res": res, "obs": obs, "text": text, "sheets": sheets, "out": _save("score", ver.name, text, sheets) if save else None}
 
 
 def cmd_score(a):
@@ -151,7 +151,7 @@ def cmd_score(a):
         print(f"\n Saved: {run['out']}\\report.xlsx  (+ report.txt)\n")
 
 
-def compare_versions(versions, cfg, truth, issues, videos=None, own=False, kind="compare"):
+def compare_versions(versions, cfg, truth, issues, videos=None, own=False, kind="compare", save=True):
     """Compare versions and save the report -> {results, obs, per, scope, text, sheets, out}."""
     if len(versions) < 2:
         raise SystemExit("compare needs at least two versions (register more with 'add', or use 'score' for one).")
@@ -179,7 +179,7 @@ def compare_versions(versions, cfg, truth, issues, videos=None, own=False, kind=
     text = report.compare_text(results, obs, per, cfg, scope)
     sheets = report.compare_sheets(results, obs, per, pairs, cfg, scope)
     return {"results": results, "obs": obs, "per": per, "scope": scope, "text": text, "sheets": sheets,
-            "out": _save(kind, "_vs_".join(v.name for v in versions), text, sheets)}
+            "out": _save(kind, "_vs_".join(v.name for v in versions), text, sheets) if save else None}
 
 
 def cmd_compare(a, own_videos=False):
