@@ -36,6 +36,9 @@ DEFAULTS = {
     "min_rolls_reliable": 20,                           # fewer labelled rolls than this -> score flagged as shaky
     "high_conf": 0.9,                                   # a wrong read at or above this score is "confidently wrong"
     "grades": {"A": 90, "B": 75, "C": 60, "D": 40},
+    # ---- web page snapshots: the folder of the tracker runs, the one that holds test_logs\ and the videos. The
+    # pictures of each roll's labels are cut from the video with the boxes the run logged there.
+    "runs_root": "",
 }
 
 

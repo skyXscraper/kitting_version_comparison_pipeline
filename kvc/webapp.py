@@ -5,6 +5,9 @@
 Runs on this computer only (127.0.0.1) and needs nothing but Python. The uploaded sheets are read and thrown away:
 nothing is registered and no report is written. The only thing kept is the truth you type (truth/truth.xlsx), so
 the true ply / range of a video is entered once. Scoring settings come from config.json.
+
+Next to each roll the page shows snapshots of its labels, cut from the run's video (see snapshots.py); they only
+live in the page and are gone when it is refreshed or other sheets are compared.
 """
 import argparse
 import base64
@@ -25,6 +28,7 @@ from .config import load_config
 from .loader import Version, load_folder, natural
 from .observations import pct
 from .scoring import grade
+from .snapshots import SnapshotError, run_snapshots
 from .truth import TruthRoll, build_truth, is_labelled, load_truth, match_rolls, write_truth
 from .xlsx_io import fnum, write_workbook
 
@@ -132,7 +136,7 @@ def _truth_table(truth, versions, videos, cfg):
             {"n": t.n, "t": t.t, "real": "" if t.real is None else "yes" if t.real else "no", "ply": t.ply,
              "rng": t.rng, "notes": t.notes,
              "ref": [None if m is None else [] if m.get(id(t)) is None else
-                     [m[id(t)].ply, m[id(t)].rng, m[id(t)].status] for m in ref]} for t in trs]})
+                     [m[id(t)].ply, m[id(t)].rng, m[id(t)].status, m[id(t)].track] for m in ref]} for t in trs]})
     return out
 
 
@@ -194,7 +198,8 @@ def _compare_result(run, cfg):
             "cards": [_card(r, cfg) for r in results], "matrix": matrix, "groups": [g for g in groups if g["items"]]}
 
 
-def api_compare(body):
+def _uploaded(body):
+    """The sheets of a request -> (versions, files left out, videos every version has, settings)."""
     files = body.get("files") or []
     if not files:
         raise SystemExit("Choose the sheets to compare first.")
@@ -208,6 +213,38 @@ def api_compare(body):
         raise SystemExit("These sheets are not of the same video, so they cannot be compared:\n"
                          + "\n".join(f"  {v.name}: {', '.join(sorted(v.videos, key=natural))}" for v in versions)
                          + "\nUpload the sheet of the same video for each model version.")
+    return versions, skipped, videos, cfg
+
+
+def api_snapshots(body):
+    """Pictures of every roll of the compared videos, keyed 'video|version index|track' like the truth table's
+    reference columns. A roll is shown as the first version that found it saw it."""
+    versions, _, videos, cfg = _uploaded(body)
+    truth, _, _ = build_truth(versions, _saved_truth()[0], cfg)
+    want = {}       # (version index, video) -> roll tracks
+    for video in videos:
+        trs = truth.get(video, [])
+        maps = [{id(t): r for t, r in match_rolls(trs, v.videos[video].rolls, cfg["roll_match_tolerance_s"])
+                 if t is not None and r is not None} for v in versions]
+        for t in trs:
+            vi = next((i for i, m in enumerate(maps) if id(t) in m), None)
+            if vi is not None:
+                want.setdefault((vi, video), set()).add(maps[vi][id(t)].track)
+    snaps, problems = {}, []
+    for (vi, video), tracks in sorted(want.items()):
+        log = versions[vi].videos[video].stats.get("log")
+        try:
+            if not log:
+                raise SnapshotError("its sheet does not name the run's log folder (Run info sheet)")
+            for track, shot in run_snapshots(cfg["runs_root"], log, tracks).items():
+                snaps[f"{video}|{vi}|{track}"] = shot
+        except SnapshotError as e:
+            problems.append(f"{video} ({versions[vi].name}): {e}")
+    return {"snaps": snaps, "problems": problems}
+
+
+def api_compare(body):
+    versions, skipped, videos, cfg = _uploaded(body)
     truth, issues = _saved_truth()
     rows = body.get("truth")
     if rows is not None:        # truth typed on the page: keep it for next time, other videos stay as they are
@@ -271,7 +308,8 @@ class Handler(BaseHTTPRequestHandler):
         if not self._local() or self.headers.get("X-KVC") != "1":
             return self._send(403, {"error": "forbidden"})
         size = int(self.headers.get("Content-Length") or 0)
-        if self.path != "/api/compare" or size > MAX_BODY:
+        api = {"/api/compare": api_compare, "/api/snapshots": api_snapshots}.get(self.path)
+        if api is None or size > MAX_BODY:
             return self._send(404 if size <= MAX_BODY else 413, {"error": "not found" if size <= MAX_BODY else "too large"})
         try:
             body = json.loads(self.rfile.read(size) or b"{}")
@@ -279,7 +317,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(400, {"error": "bad request"})
         with LOCK:
             try:
-                self._send(200, api_compare(body))
+                self._send(200, api(body))
             except SystemExit as e:
                 self._send(400, {"error": str(e)})
             except PermissionError as e:

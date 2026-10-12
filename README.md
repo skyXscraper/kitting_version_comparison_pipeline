@@ -32,12 +32,29 @@ another port). One page, nothing to register:
    sheet counts as two versions. One sheet alone gives that version's score.
 2. Press **Compare**. Each version is named after the model written in its sheet (`rec v5` -> `rec_v5`; a second
    sheet of the same model becomes `rec_v5_2`).
-3. Type the true ply / range of the video's rolls in the blue cells and press **Save truth & score again**.
+3. Type the true ply / range of the video's rolls in the blue cells and press **Save & score** (the table is on the page itself; nothing is filled in the Excel sheets).
 
 The scores, side-by-side table, observations and per-roll tables are shown on the page; *Download as Excel* gives
 the same report as a workbook. The uploaded sheets are only read: they are not kept, nothing is added to
 `versions.json` and no report folder is written. The one thing kept is the truth you type (`truth	ruth.xlsx`,
 shared with the command line), so a video's true values are entered once.
+
+### Pictures of the rolls
+
+Under each roll of the truth table the page shows what was detected on it: the roll itself, then its labels cut
+out straight and enlarged, from the sharpest frames. Read the true ply and range off them instead of looking up
+the video time; click a picture to turn it upside down. A row whose pictures show no roll, or the same roll as
+the row before, gets **Real roll? = no**.
+
+- The models are not run again. Each tracker run already wrote every box it detected to
+  `test_logs\<run>\detections.csv`; the sheet names that run, and the page cuts those boxes out of the run's
+  video. So the pictures are exactly the detections the sheet is about.
+- `runs_root` in `config.json` is the folder that holds `test_logs\` and the videos (the RTracker&OCR folder).
+  If a run's log folder or video is no longer there, the page says so and shows no pictures for it.
+- A roll is shown as the first uploaded version that found it saw it.
+- The pictures are never written to disk. They live in the open page only and are gone when it is refreshed or
+  other sheets are compared.
+- Needs `opencv-python` (and numpy) in the Python that runs `kvc_web.py`; everything else still needs nothing.
 
 Speed parts of the score (frame rate, detection / OCR time) come from the summary workbook; drop it in together
 with the sheets to get them, otherwise the score is accuracy only and the weights are rescaled.

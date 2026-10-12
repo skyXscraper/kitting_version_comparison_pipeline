@@ -46,6 +46,7 @@ input[type=text], select { font: inherit; color: var(--ink); background: var(--c
 #msg div { padding: 10px 14px; border-radius: 8px; background: var(--good); color: var(--good-ink);
   box-shadow: 0 4px 14px rgba(0,0,0,.2); white-space: pre-wrap; cursor: pointer; }
 #msg div.err { background: var(--bad); color: var(--bad-ink); }
+#truth-box { max-height: 82vh; }
 .scroll { overflow: auto; max-height: 70vh; border: 1px solid var(--line); border-radius: 6px; }
 table { border-collapse: collapse; width: 100%; }
 th, td { padding: 5px 9px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; white-space: nowrap; }
@@ -60,6 +61,13 @@ td.wrap { white-space: normal; min-width: 320px; }
 tr.video td { background: var(--head); font-weight: 600; }
 #truth-table input, #truth-table select { background: var(--input); border-color: transparent; padding: 3px 6px; width: 100%; }
 #truth-table td { padding: 3px 6px; vertical-align: middle; }
+#truth-table tr.roll td { border-bottom: 0; padding-top: 10px; }
+#truth-table tr.snap td { white-space: normal; padding: 6px 6px 12px; border-bottom: 2px solid var(--line); }
+.snaps { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+.snaps figure { margin: 0; text-align: center; font-size: 11.5px; color: var(--dim); }
+.snaps img { display: block; height: 100px; border-radius: 4px; border: 1px solid var(--line); cursor: pointer; }
+.snaps img.whole { height: auto; max-height: 170px; max-width: 620px; }
+.snaps img.flip { transform: rotate(180deg); }
 .tag { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 12px; font-weight: 600; }
 .cards { display: grid; gap: 12px; margin-top: 12px; }
 .tiles { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 10px; }
@@ -94,7 +102,7 @@ pre { margin: 8px 0 0; padding: 12px; background: var(--head); border-radius: 6p
     </div>
     <div class="row" style="margin-top:14px">
       <span class="dim small grow">The sheets are only read, not kept. The version name comes from the model written in each sheet.
-        Adding the summary workbook of a version gives its speed numbers too.</span>
+        Adding the summary workbook of a version gives its speed numbers too. The true ply and range are typed here on the page, after Compare.</span>
       <button class="primary big" id="go" disabled>Compare</button>
     </div>
   </div>
@@ -129,6 +137,7 @@ const LEVEL = {ALERT: 'bad', WARN: 'warn', INFO: ''};
 // ------------------------------------------------------------ the sheets
 let files = [];            // [{file, data: base64 once read}]
 let truth = null, extra = [], dirty = false, link = null;
+let snaps = null, snapProblems = [], snapFor = '';     // pictures of the rolls: only kept here, in the open page
 
 function pick(list) {
   const ok = [...list].filter(f => /\.xlsx$/i.test(f.name) && !f.name.startsWith('~$'));
@@ -176,12 +185,49 @@ async function go() {
     const r = await res.json().catch(() => ({error: res.statusText}));
     if (!res.ok) throw new Error(r.error || res.statusText);
     truth = r.truth; extra = []; dirty = false;
+    const sig = files.map(f => [f.file.name, f.file.size, f.file.lastModified].join(':')).join('|');
+    if (sig !== snapFor) { snapFor = sig; snaps = null; snapProblems = []; loadSnaps(sig); }   // other sheets: start over
     if (r.saved) say('Truth saved.');
     render(r);
   } catch (e) { say(e.message, true); }
   finally { showFiles(); const b = $('#truth-save'); if (b) b.disabled = !dirty; }
 }
 $('#go').onclick = go;
+
+// ------------------------------------------------------------ pictures of the rolls
+async function loadSnaps(sig) {
+  let r;
+  try {
+    const res = await fetch('/api/snapshots', {method: 'POST', headers: {'X-KVC': '1'},
+      body: JSON.stringify({files: files.map(f => ({name: f.file.name, data: f.data}))})});
+    r = await res.json();
+    if (!res.ok) throw new Error(r.error || res.statusText);
+  } catch (e) { r = {snaps: {}, problems: [e.message]}; }
+  if (sig !== snapFor) return;      // other sheets were compared meanwhile
+  snaps = r.snaps; snapProblems = r.problems;
+  fillSnaps();
+}
+function snapKey(video, row) {      // a roll is shown as the first version that found it saw it
+  const i = row.ref.findIndex(x => x && x.length);
+  return i < 0 ? null : `${video}|${i}|${row.ref[i][3]}`;
+}
+function picture(src, cls, caption) {
+  return el('figure', {}, el('img', {src, class: cls, title: 'Click to turn it upside down', onclick: e => e.target.classList.toggle('flip')}), caption);
+}
+function snapContent(key) {
+  if (snaps === null) return el('span', {class: 'dim small'}, 'Cutting the pictures of this roll out of the video...');
+  const s = snaps[key];
+  if (!s || (!s.roll && !s.crops.length)) return el('span', {class: 'dim small'}, 'No picture of this roll.');
+  return el('div', {class: 'snaps'},
+    s.roll ? picture(s.roll, 'whole', `the roll at ${s.t} s`) : null,
+    s.crops.map(c => picture(c.img, '', `${c.t} s`)),
+    s.crops.length ? null : el('span', {class: 'dim small'}, 'No label was detected on this roll.'));
+}
+function fillSnaps() {
+  document.querySelectorAll('td[data-snap]').forEach(td => td.replaceChildren(snapContent(td.dataset.snap)));
+  const box = $('#snap-problems');
+  if (box) box.replaceChildren(...snapProblems.map(t => el('li', {}, el('span', {class: 'tag warn'}, 'NO PICS'), el('span', {}, t))));
+}
 
 // ------------------------------------------------------------ truth
 function touched() { dirty = true; const b = $('#truth-save'); if (b) b.disabled = false; }
@@ -199,10 +245,13 @@ function truthTable(names) {
   for (const v of truth) {
     if (truth.length > 1) body.push(el('tr', {class: 'video'}, el('td', {colSpan: cols}, v.video)));
     for (const r of v.rows) {
-      body.push(el('tr', {}, el('td', {class: 'num'}, r.n), el('td', {class: 'num'}, r.t ?? ''),
+      const key = snapKey(v.video, r);
+      body.push(el('tr', {class: 'roll'}, el('td', {class: 'num'}, r.n), el('td', {class: 'num'}, r.t ?? ''),
         el('td', {}, realSelect(r)), el('td', {}, field(r, 'ply', 70)), el('td', {}, field(r, 'rng', 110)), el('td', {}, field(r, 'notes', 140)),
         r.ref.map(x => el('td', {class: x && x.length ? '' : 'dim'}, x === null ? '(video not run)' : !x.length ? '(not found)'
           : `${x[0] || '-'}  ·  ${x[1] || '-'}  ·  ${x[2] || '-'}`))));
+      body.push(el('tr', {class: 'snap'}, key ? el('td', {colSpan: cols, 'data-snap': key}, snapContent(key))
+        : el('td', {colSpan: cols, class: 'dim small'}, 'No version found this roll, so there is no picture of it.')));
     }
   }
   for (const r of extra) {
@@ -245,7 +294,7 @@ function render(resp) {
     {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
 
   // scores
-  out.push(el('div', {class: 'card'},
+  const scoreCard = el('div', {class: 'card'},
     el('div', {class: 'row'}, el('h2', {style: 'margin:0'}, (r.kind === 'score' ? 'Score: ' : 'Comparison: ') + r.title), el('span', {class: 'grow'}),
       el('a', {class: 'btn', href: link, download: r.xlsx_name}, 'Download as Excel')),
     el('div', {class: 'dim'}, `Video: ${resp.videos.join(', ')}`),
@@ -257,19 +306,23 @@ function render(resp) {
         el('div', {class: 't'}, s.title),
         el('div', {class: 'n'}, s.score == null ? '-' : fmt(s.score), el('small', {}, s.score == null ? ' needs truth' : ' / 100 '),
           s.score == null ? null : el('span', {class: 'tag ' + GRADE[s.grade]}, s.grade)),
-        el('div', {class: 'dim small'}, s.what)))))))));
+        el('div', {class: 'dim small'}, s.what))))))));
 
   // truth
   const missing = resp.videos.length - resp.labelled;
-  out.push(el('div', {class: 'card'},
-    el('div', {class: 'row', style: 'margin-bottom:10px'}, el('h2', {style: 'margin:0'}, 'True values of the rolls'), el('span', {class: 'grow'}),
+  const truthCard = el('div', {class: 'card'},
+    el('div', {class: 'row', style: 'margin-bottom:10px'}, el('h2', {style: 'margin:0'}, missing ? 'Type the true ply and range of each roll' : 'True ply and range of the rolls'), el('span', {class: 'grow'}),
       el('button', {onclick: () => { extra.push({video: truth[0].video, t: '', real: '', ply: '', rng: '', notes: ''}); touched(); drawTruth(names); }}, '+ Add a roll no version found'),
-      el('button', {class: 'primary', id: 'truth-save', disabled: true, onclick: go}, 'Save truth & score again')),
+      el('button', {class: 'primary', id: 'truth-save', disabled: true, onclick: go}, 'Save & score')),
     missing ? el('p', {class: 'note warn'}, 'No true values yet for ' + (resp.videos.length > 1 ? `${missing} of these videos` : 'this video')
       + ': type the real ply and range of every roll in the blue cells to get the accuracy scores. Until then only speed and agreement between the versions are shown.') : null,
+    el('ul', {class: 'obs', id: 'snap-problems', style: 'margin-bottom:8px'}),
     el('div', {class: 'scroll', id: 'truth-box'}, truthTable(names)),
-    el('p', {class: 'dim small', style: 'margin:8px 0 0'}, 'Fill every roll of the video; leave True range empty if the roll has no range label. Set Real roll? = no for a row that is not a roll '
-      + '(or is the same roll tracked twice). The truth of a video is remembered (truth\\truth.xlsx), so it is typed only once.')));
+    el('p', {class: 'dim small', style: 'margin:8px 0 0'}, 'Under each roll are pictures of what was detected on it: the roll, then its labels cut out and enlarged '
+      + '(sharpest frames; click a picture to turn it upside down). Read the ply and range off them. The pictures are not saved: they are gone when the page is refreshed or other sheets are compared. '
+      + 'Fill every roll of the video; leave True range empty if the roll has no range label. Set Real roll? = no for a row that is not a roll '
+      + '(or is the same roll tracked twice). The truth of a video is remembered (truth\\truth.xlsx), so it is typed only once. There is nothing to fill in the Excel sheets.'));
+  out.push(...(missing ? [truthCard, scoreCard] : [scoreCard, truthCard]));   // nothing typed yet: the table comes first
 
   if (r.matrix) {
     out.push(el('div', {class: 'card'}, el('h2', {}, 'Side by side'), el('div', {class: 'scroll'}, el('table', {},
@@ -295,6 +348,8 @@ function render(resp) {
     el('details', {style: 'margin-top:12px'}, el('summary', {class: 'dim'}, 'Plain text report'), el('pre', {}, r.text))));
   $('#out').replaceChildren(...out);
   open(Math.max(0, r.sheets.findIndex(s => s.name === 'Rolls')));
+  fillSnaps();
+  if (missing) { const first = $('#truth-table td:nth-child(4) input'); if (first) first.focus(); }
 }
 </script>
 </body>
